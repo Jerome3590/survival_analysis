@@ -1,0 +1,1349 @@
+---
+title: "Survival Analysis - Binary Classification"
+author: "R. Jerome Dixon"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+format:
+  html:
+    toc: true
+    toc-depth: 5
+    code-fold: true
+    code-summary: "Show the code"
+    embed-resources: true
+    default-image-extension: svg
+    dpi: 600
+---
+
+```{r load-libraries}
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+library(here)
+library(dplyr)
+library(readr)
+library(magrittr)
+library(spatstat)
+library(tibble)
+library(ggplot2)
+library(purrr)
+library(tidyverse)
+library(huxtable)
+library(reticulate)
+library(DT)
+library(caret)
+library(forcats)
+
+(options)(scipen=999)
+
+```
+
+### Survival Model Dataset
+
+```{r load-dataset}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+set.seed(1997)
+
+survival_model <- read_rds(here("data","survival_analysis.rds"))
+
+survival_model %<>%
+  mutate_if(is.character, as.factor) 
+ 
+survival_model %>% 
+  str()
+
+
+```
+
+####  Dataset
+
+```{r format-dataset}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+survival_model %<>%
+  mutate(INIT_STAT = as.factor(INIT_STAT)) %>%
+  mutate(INOTROPES_TCR = as.factor(INOTROPES_TCR)) %>%
+  mutate(PGE_TCR = as.factor(PGE_TCR)) %>%
+  mutate_if(is.factor, ~fct_na_value_to_level(., "Unknown")) %>% 
+  select(-c( days_total, WL_ID_CODE, PT_CODE)) %>% 
+  select(-c(BMI, PGE_TCR, WL_OTHER_ORG, LISTING_CTR_CODE )) %>% 
+  filter(!is.na(outcome_final))
+
+survival_model %>% 
+  str()
+
+```
+
+- Target Label is 'outcome_final'
+
+```{r}
+
+survival_model %<>% 
+  rename(
+    `Blood Type` = ABO,
+    `Gender` = GENDER,
+    `Race` = RACE,
+    `Diabetes` = DIAB,
+    `Height` = HEIGHT_CM,
+    `Weight` = WEIGHT_KG,
+    `ECMO at Reg` = ECMO_CAND_REG,
+    `VAD Device TCR` = VAD_DEVICE_TY_TCR,
+    `Ventilator at Reg` = VENTILATOR_CAND_REG,
+    `Defribilator` = IMPL_DEFIBRIL,
+    `Recent Creatinine` = MOST_RCNT_CREAT,
+    `Inotropes TCR` = INOTROPES_TCR,
+    `Functional Status at Registration` = FUNC_STAT_CAND_REG,
+    `Total Albumin Level` = TOT_SERUM_ALBUM,
+    `Candidate Diagnosis` = CAND_DIAG,
+    `LC Average Volume of Txp/Year` = LISTING_CTR_TX_AVG,
+    `Initial Status` = INIT_STAT,
+    `Age` = AGE,
+    #`LC Code` = LISTING_CTR_CODE,
+    `LC Median # Offer Refusals` = median_refusals,
+    `LC Median Wait Days` = median_wait_days,
+    `LC Median Wait Days at Initial Status` = median_wait_days_status
+    
+  )
+
+```
+
+```{r}
+
+cat_features <- names(survival_model)[sapply(survival_model, is.factor)]
+
+cat_features
+
+
+```
+
+```{r}
+survival_model_one_hot <- survival_model
+```
+
+### One Hot Encoding
+
+```{r}
+
+# Create the dummy variables specification
+dummies <- dummyVars(~ ., data = survival_model_one_hot[, cat_features], fullRank = FALSE)
+
+# Generate the dummy variables
+df_dummies <- predict(dummies, newdata = survival_model_one_hot)
+
+# Bind the new dummy variables with the original dataframe minus the original factor columns
+survival_model_one_hot <- cbind(survival_model_one_hot[, !(names(survival_model_one_hot) %in% cat_features)], df_dummies)
+
+# Review the structure of the updated dataframe
+str(survival_model_one_hot)
+
+
+```
+
+```{r}
+
+features_cb <- survival_model_one_hot %>% 
+  select(-outcome_final)
+
+# Must be factor or numeric "Class"
+model_target <- survival_model_one_hot %>% 
+  select(outcome_final) %>% 
+  dummify() %>% 
+  as.data.frame()
+
+target_cb <- model_target$outcome_final
+
+```
+
+
+```{python catboost-r-data}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+import numpy as np
+from catboost import Pool
+
+# initialize data
+X = r.features_cb
+
+y = r.target_cb
+
+# Using this object for feature importance calculations
+test_data = catboost_pool = Pool(X, y)
+
+```
+
+#### Hyperparameter Optimization with Optuna
+
+```{python optuna-hyperparameter-optimization, eval=FALSE}
+
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+import numpy as np
+from sklearn.model_selection import train_test_split, StratifiedKFold
+import pandas as pd
+import catboost as cb
+import optuna
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+
+# Convert target label from list to array
+Y = np.array(y)  
+
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, stratify=Y, random_state=42)
+
+def objective(trial):
+    learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3)
+    depth = trial.suggest_int("depth", 3, 9)
+    colsample_bylevel = trial.suggest_float("colsample_bylevel", 0.05, 1.0)
+    min_data_in_leaf = trial.suggest_int("min_data_in_leaf", 1, 100)
+    l2_leaf_reg = trial.suggest_float("l2_leaf_reg", 1, 12)
+  
+    params = {
+        "objective": "Logloss",
+        "iterations": 1000,
+        "learning_rate": learning_rate,
+        "depth": depth,
+        "colsample_bylevel": colsample_bylevel,
+        "min_data_in_leaf": min_data_in_leaf,
+        "boosting_type": "Ordered",
+        "bootstrap_type": "MVS",
+        "l2_leaf_reg": l2_leaf_reg,
+        "early_stopping_rounds": 100,
+        "eval_metric": 'Logloss',
+    }
+
+    # Initialize CatBoostClassifier with parameters
+    model = cb.CatBoostClassifier(**params)
+
+    # Convert training data into a Pool to specify cat features
+    train_pool = cb.Pool(X_train, Y_train)
+
+    # Perform cross-validation
+    cv_results = cb.cv(train_pool, params, fold_count=3, seed=42, stratified=True, verbose=False)
+
+    # Negative mean Logloss to maximize (since Optuna minimizes)
+    mean_logloss = -np.mean(cv_results['test-Logloss-mean'])
+
+    return mean_logloss
+
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=100, timeout=6000)
+
+print("Number of finished trials: {}".format(len(study.trials)))
+print("Best trial:")
+best_trial = study.best_trial
+
+print("  Params: ")
+for key, value in best_trial.params.items():
+    print("    {}: {}".format(key, value))
+
+```
+
+```{python optuna-params}
+
+model_params = {
+    'learning_rate': 0.17,
+    'depth': 3,
+    'colsample_bylevel': 0.11,
+    'min_data_in_leaf': 31,
+    'l2_leaf_reg': 9.41
+}
+    
+```
+
+```{python catboost-model-logloss}
+
+#| eval: true
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from catboost import CatBoostClassifier, Pool
+
+
+X_train, X_validation, Y_train, Y_validation = train_test_split(X, y, train_size=0.80, stratify=y)
+
+survival_model = CatBoostClassifier(iterations=1000,
+                               objective='Logloss',
+                               **model_params, 
+                               boosting_type= 'Ordered',
+                               bootstrap_type='MVS',
+                               early_stopping_rounds=100,
+                               use_best_model=True, random_seed=1997)
+                               
+
+# Create a Pool object for the training and testing data
+train_pool = Pool(X_train, label=Y_train)
+test_pool = Pool(X_validation, label=Y_validation)
+ 
+
+survival_model.fit(train_pool, eval_set=test_pool)
+
+gain = survival_model.get_feature_importance(prettified=True)
+loss = survival_model.get_feature_importance(test_data, type='LossFunctionChange', prettified=True)
+
+```
+
+#### Feature Importance - One Hot
+
+```{r}
+
+gain_tbl <- py$gain
+loss_tbl <- py$loss
+
+num_features <- nrow(loss_tbl) # Total number of features
+
+importances <- loss_tbl %>%
+  mutate(
+    Scaled_Importances = scale(Importances)[, 1],
+    Min_Importance = min(Scaled_Importances),
+    Max_Importance = max(Scaled_Importances),
+    Score = ((Scaled_Importances - Min_Importance) / (Max_Importance - Min_Importance)) * num_features
+  ) %>%
+  select(-Scaled_Importances, -Min_Importance, -Max_Importance)
+
+
+importances %>% 
+  datatable()
+
+```
+
+#### SHAP Values
+
+```{python shap-setup}
+
+#| eval: false
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+import shap
+
+explainer = shap.TreeExplainer(survival_model)
+shap_values = explainer(X)
+    
+```
+
+##### Beeswarm (Top 25 Features)
+
+```{python shap-setup2}
+
+#| eval: false
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+
+import matplotlib.pyplot as plt
+import shap
+
+shap.initjs()
+
+plt.close()
+plt.close()
+
+
+shap.plots.beeswarm(shap_values)
+plt.tight_layout()
+
+plt.savefig('images/shapley_beeswarm_one_hot.png', dpi=1200)
+
+```
+
+
+![Beeswarm Chart](images/shapley_beeswarm_chart.png){#fig-shap-beeswarm-chart}
+
+
+##### Bar Chart for Feature Importance
+
+```{python shapley-bar-chart}
+
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+#| label: fig-net-effect
+#| fig-cap: 
+#|   - "Net Effect"
+
+import matplotlib.pyplot as plt
+import shap
+
+shap.initjs()
+
+plt.close()
+plt.close()
+
+shap.plots.bar(shap_values, max_display=25)
+
+plt.tight_layout()
+
+# Save the image in high resolution
+plt.savefig('images/shapley_bar_one_hot.png', dpi=1200)
+
+
+```
+
+
+![Feature Importance Bar Chart](images/shapley_bar_chart.png){#fig-shap-mean-bar-chart}
+
+
+##### Shap Value Summary
+
+```{r}
+
+features <- names(features_cb)
+
+# Calculate SHAP values
+shap_values <- py$shap_values
+
+# Extract SHAP values for each feature (excluding the last column which is the expected value)
+shap_values_matrix <- shap_values$values
+
+# Convert SHAP values to a dataframe for easier analysis
+shap_df <- as.data.frame(shap_values_matrix)
+names(shap_df) <- shap_values$feature_names
+
+# Print the SHAP values dataframe
+print(shap_df)
+
+```
+
+```{python}
+
+import pandas as pd
+import json
+
+# Filter and extract Feature Id's where Importance is greater than 0
+feature_ids_loss = loss[loss['Importances'] > 0]['Feature Id'].tolist()
+feature_ids_gain = gain[gain['Importances'] > 0]['Feature Id'].tolist()
+
+# Combine the lists and remove duplicates
+final_top_features = list(set(feature_ids_loss + feature_ids_gain))
+
+# Helper function to chunk the list
+def chunk_list(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+# Chunk the list into sublists of 4 elements each
+chunked_packages = list(chunk_list(final_top_features, 4))
+
+# Convert each chunk into a JSON string and collect them into a list
+json_chunks = [json.dumps(chunk) for chunk in chunked_packages]
+
+# Join all chunks with a line break to ensure each chunk is on a new line
+final_features_top = "\n".join(json_chunks)
+
+print(final_features_top)
+
+```
+
+#### Absolute SHAP Values by Feature Level
+
+```{r}
+
+```
+
+
+```{python shap-value-summary, eval=FALSE, cache=TRUE}
+
+# Reset the index of X_train for alignment
+X_train_reset = X_train.reset_index(drop=True)
+
+# Initialize an empty DataFrame for SHAP summary
+abs_shap_summary_df = pd.DataFrame()
+
+# Iterate over top features to calculate SHAP values
+for feature in final_top_features:
+    feature_index = X_train_reset.columns.get_loc(feature)
+    feature_shap_values = shap_values[:, feature_index]
+
+    # Create a temporary DataFrame for this feature
+    temp_df = pd.DataFrame()
+    temp_df['Feature Level'] = X_train_reset[feature]
+    temp_df['SHAP Value'] = feature_shap_values
+    temp_df['Feature'] = feature  # Add the feature name as a column
+
+    # Append to the SHAP summary DataFrame
+    abs_shap_summary_df = pd.concat([abs_shap_summary_df, temp_df], ignore_index=True)
+
+# Compute absolute SHAP value for each 'level'
+abs_shap_summary_df['Level_Abs_SHAP_Value'] = abs_shap_summary_df['SHAP Value'].abs()
+
+# Aggregate to get the absolute SHAP value for each feature
+feature_abs_shap = abs_shap_summary_df.groupby('Feature')['SHAP Value'].apply(lambda x: x.abs().mean()).reset_index()
+feature_abs_shap.columns = ['Feature', 'Feature_Abs_SHAP_Value']
+
+# Merge the aggregated feature SHAP values back to the original DataFrame
+abs_shap_summary_df = abs_shap_summary_df.merge(feature_abs_shap, on='Feature')
+
+# Remove duplicate rows
+abs_shap_summary_df = abs_shap_summary_df.drop_duplicates()
+abs_shap_summary_df['Feature Level'] = abs_shap_summary_df['Feature Level'].astype(str)
+
+# Filter where 'Feature Level' == 'NONE'
+filtered_df = abs_shap_summary_df[abs_shap_summary_df['Feature Level'] == 'NONE']
+
+```
+
+
+```{python shap-value-summary, eval=FALSE, cache=TRUE}
+
+# Save the final SHAP summary DataFrame to parquet file
+abs_shap_summary_df.to_csv('abs_shap_value_feature_importance.csv', index=False)
+
+```
+
+```{r eval=FALSE}
+abs_shap_summary_df <- read_csv("abs_shap_value_feature_importance.csv")
+```
+
+```{r eval=FALSE}
+abs_shap_summary <- abs_shap_summary_df %>% 
+  filter(`Feature Level` != 'NONE')
+```
+
+
+```{python eval=FALSE}
+
+import pandas as pd
+import plotly.express as px
+
+# Create the plotly bar chart
+fig = px.bar(abs_shap_summary_df,
+             x='Feature',
+             y='Average SHAP Value',
+             color='Feature Level',
+             title='Feature Importance',
+             labels={'Average SHAP Value': 'Average SHAP Value'},
+             barmode='group')
+
+# Add filters for feature importance
+fig.update_layout(
+    updatemenus=[
+        dict(
+            buttons=list([
+                dict(
+                    label="All",
+                    method="update",
+                    args=[{"visible": [True] * len(sorted_feature_level_aggregation)}],
+                ),
+                dict(
+                    label="Top 5 Features",
+                    method="update",
+                    args=[{"visible": [True] * 5 + [False] * (len(sorted_feature_level_aggregation) - 5)}],
+                ),
+                # Add more filters as needed
+            ]),
+            direction="down",
+            showactive=True,
+            x=0.05,
+            xanchor="left",
+            y=1.15,
+            yanchor="top"
+        ),
+    ]
+)
+
+# Show the plot
+fig.show()
+
+
+```
+
+#### Positive and Negative SHAP Values by Feature Level
+
+```{python eval=FALSE}
+
+import pandas as pd
+import numpy as np
+import shap
+from catboost import CatBoostClassifier
+
+# Initialize the SHAP explainer with the model
+explainer = shap.Explainer(final_model)
+
+# Compute SHAP values for the positive class
+shap_values = explainer.shap_values(X_train)
+
+# Convert the SHAP values to a dataframe for easier manipulation
+shap_df = pd.DataFrame(shap_values, columns=X_train.columns)
+
+# Reset the index of X_train to align with SHAP values DataFrame
+X_train_reset = X_train.reset_index(drop=True)
+
+# Create a long-format DataFrame where each row is a feature-level SHAP value
+long_format_shap = pd.DataFrame(columns=['Feature', 'Feature Level', 'SHAP Value'])
+
+for feature in X_train_reset.columns:
+    temp_df = pd.DataFrame({
+        'Feature': feature,
+        'Feature Level': X_train_reset[feature],
+        'SHAP Value': shap_df[feature]
+    })
+    long_format_shap = pd.concat([long_format_shap, temp_df], ignore_index=True)
+
+# long_format_shap now contains feature, feature level, and SHAP value for each observation
+
+# Aggregate further to understand the average impact of each feature level
+feature_level_aggregation = long_format_shap.groupby(['Feature', 'Feature Level'])['SHAP Value'].mean().reset_index(name='Average SHAP Value')
+
+# Sort dataFrame to focus on the most influential feature levels
+sorted_feature_level_aggregation = feature_level_aggregation.sort_values(by='Average SHAP Value', ascending=False)
+
+sorted_feature_level_aggregation['Feature Level'] = sorted_feature_level_aggregation['Feature Level'].astype(str)
+
+
+# Save the final SHAP summary DataFrame to parquet file
+sorted_feature_level_aggregation.to_csv('cohort1/cohort1_shap_value_feature_importance.csv', index=False)
+
+```
+
+```{python eval=FALSE}
+
+import pandas as pd
+import plotly.express as px
+
+# Create the plotly bar chart
+fig = px.bar(sorted_feature_level_aggregation,
+             x='Feature',
+             y='Average SHAP Value',
+             color='Feature Level',
+             title='Feature Importance',
+             labels={'Average SHAP Value': 'Average SHAP Value'},
+             barmode='group')
+
+# Add filters for feature importance
+fig.update_layout(
+    updatemenus=[
+        dict(
+            buttons=list([
+                dict(
+                    label="All",
+                    method="update",
+                    args=[{"visible": [True] * len(sorted_feature_level_aggregation)}],
+                ),
+                dict(
+                    label="Top 5 Features",
+                    method="update",
+                    args=[{"visible": [True] * 5 + [False] * (len(sorted_feature_level_aggregation) - 5)}],
+                ),
+                # Add more filters as needed
+            ]),
+            direction="down",
+            showactive=True,
+            x=0.05,
+            xanchor="left",
+            y=1.15,
+            yanchor="top"
+        ),
+    ]
+)
+
+# Show the plot
+fig.show()
+
+
+```
+
+
+
+### Numerical Encoding
+
+```{r}
+
+cat_encoded_features <- features_cb[10:75]
+
+for (col in names(cat_encoded_features)) {
+  if (any(cat_encoded_features[[col]] == 1, na.rm = TRUE)) {
+    sum_col <- sum(cat_encoded_features[[col]], na.rm = TRUE)
+    cat_encoded_features <- cat_encoded_features %>%
+      mutate(!!col := if_else(!!sym(col) == 1, sum_col, !!sym(col)))
+  }
+}
+
+# Check the result
+head(cat_encoded_features)
+
+
+```
+
+
+```{r}
+
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+
+# Scale frequency count by feature importances
+for (i in 1:nrow(importances)) {
+  feature <- importances$`Feature Id`[i]
+  score <- importances$Score[i]
+  
+  if (feature %in% names(cat_encoded_features)) {
+    cat_encoded_features <- cat_encoded_features %>%
+      mutate(!!feature := if_else(!!sym(feature) != 0, !!sym(feature) * score, !!sym(feature)))
+
+  }
+}
+
+
+head(cat_encoded_features)
+
+```
+
+```{r}
+
+# Distinct Numerical Encodings
+numerical_encoding <- cat_encoded_features %>%
+  pivot_longer(cols = everything(), names_to = "Feature", values_to = "Encoded_Value") %>% 
+  filter(Encoded_Value > 0) %>% 
+  unique() %>% 
+  arrange(-Encoded_Value)
+
+numerical_encoding %>% 
+  datatable()
+
+```
+
+
+```{r}
+
+# Split Encoded_Feature into Feature and Level using regex to handle backticks and dots
+encodings <- numerical_encoding %>%
+  mutate(
+    Feature_Level = str_split_fixed(Feature, "(?<=`|\\.)", 3),
+    Feature = str_remove_all(Feature_Level[, 1], "`|\\."),
+    Level = str_remove_all(Feature_Level[, 2], "`|\\.") ,
+    Feature = ifelse(Feature == "", str_remove_all(Feature_Level[, 2], "`|\\."), Feature),
+    Level = ifelse(Feature_Level[,1] == "`", str_remove_all(Feature_Level[, 3], "`|\\."), Feature_Level[,2])
+  ) %>% 
+  select(Feature,Level,Encoded_Value) %>% 
+  arrange(-Encoded_Value)
+
+
+encodings %>% 
+  datatable()
+
+
+```
+
+
+
+```{r}
+
+# Initialize the updated dataframe
+df_updated <- survival_model2
+
+# Replace categorical values with numerical encodings
+for (feature in unique(encodings$Feature)) {
+  encoding_map <- encodings %>%
+    filter(Feature == feature) %>%
+    select(Level, Encoded_Value) %>%
+    deframe()
+  
+  df_updated[[feature]] <- as.character(df_updated[[feature]])
+  df_updated[[feature]] <- as.numeric(encoding_map[df_updated[[feature]]])
+}
+
+# Print the updated dataframe to verify
+head(df_updated)
+
+```
+
+
+```{r}
+rm(features_cb,loss_tbl,model_target,survival_model,survival_model2,importances,df_dummies,df_encoded_long,cat_encoded_features,one_hot_features,dummies,cat_encoding,numerical_encoding,target_cb)
+```
+
+
+```{r}
+
+features_cb <- df_updated %>% 
+  select(-outcome_final)
+
+# Must be factor or numeric "Class"
+model_target <- df_updated %>% 
+  select(outcome_final) %>% 
+  dummify() %>% 
+  as.data.frame()
+
+target_cb <- model_target$outcome_final
+
+```
+
+```{python catboost-r-data}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+import numpy as np
+from catboost import Pool
+
+# initialize data
+X = r.features_cb
+
+y = r.target_cb
+
+# Using this object for feature importance calculations
+test_data = catboost_pool = Pool(X, y)
+
+
+```
+
+#### Hyperparameter Optimization with Optuna
+
+```{python optuna-hyperparameter-optimization, eval=FALSE}
+
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+import numpy as np
+from sklearn.model_selection import train_test_split, StratifiedKFold
+import pandas as pd
+import catboost as cb
+import optuna
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+
+# Convert target label from list to array
+Y = np.array(y)  
+
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, stratify=Y, random_state=42)
+
+def objective(trial):
+    learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3)
+    depth = trial.suggest_int("depth", 3, 9)
+    colsample_bylevel = trial.suggest_float("colsample_bylevel", 0.05, 1.0)
+    min_data_in_leaf = trial.suggest_int("min_data_in_leaf", 1, 100)
+    l2_leaf_reg = trial.suggest_float("l2_leaf_reg", 1, 12)
+  
+    params = {
+        "objective": "Logloss",
+        "iterations": 1000,
+        "learning_rate": learning_rate,
+        "depth": depth,
+        "colsample_bylevel": colsample_bylevel,
+        "min_data_in_leaf": min_data_in_leaf,
+        "boosting_type": "Ordered",
+        "bootstrap_type": "MVS",
+        "l2_leaf_reg": l2_leaf_reg,
+        "early_stopping_rounds": 100,
+        "eval_metric": 'Logloss',
+    }
+
+    # Initialize CatBoostClassifier with parameters
+    model = cb.CatBoostClassifier(**params)
+
+    # Convert training data into a Pool to specify cat features
+    train_pool = cb.Pool(X_train, Y_train)
+
+    # Perform cross-validation
+    cv_results = cb.cv(train_pool, params, fold_count=3, seed=42, stratified=True, verbose=False)
+
+    # Negative mean Logloss to maximize (since Optuna minimizes)
+    mean_logloss = -np.mean(cv_results['test-Logloss-mean'])
+
+    return mean_logloss
+
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=100, timeout=6000)
+
+print("Number of finished trials: {}".format(len(study.trials)))
+print("Best trial:")
+best_trial = study.best_trial
+
+print("  Params: ")
+for key, value in best_trial.params.items():
+    print("    {}: {}".format(key, value))
+
+```
+
+```{python optuna-params}
+
+model_params = {
+    'learning_rate': 0.28,
+    'depth': 3,
+    'colsample_bylevel': 0.05,
+    'min_data_in_leaf': 54,
+    'l2_leaf_reg': 6.57
+}
+    
+```
+
+```{python catboost-model-logloss}
+
+#| eval: true
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+from sklearn.model_selection import train_test_split, StratifiedKFold
+from catboost import CatBoostClassifier, Pool
+
+
+X_train, X_validation, Y_train, Y_validation = train_test_split(X, y, train_size=0.80, stratify=y)
+
+survival_model_logloss = CatBoostClassifier(iterations=1000,
+                               objective='Logloss',
+                               **model_params, 
+                               boosting_type= 'Ordered',
+                               bootstrap_type='MVS',
+                               early_stopping_rounds=100,
+                               use_best_model=True, random_seed=1997)
+                               
+
+# Create a Pool object for the training and testing data
+train_pool = Pool(X_train, label=Y_train)
+test_pool = Pool(X_validation, label=Y_validation)
+ 
+
+survival_model_logloss.fit(train_pool, eval_set=test_pool)
+
+```
+
+
+```{python shap-setup}
+
+#| eval: false
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+import shap
+
+explainer = shap.TreeExplainer(survival_model_logloss)
+shap_values = explainer(X)
+    
+```
+
+#### CatBoost Feature Importance
+
+```{r}
+
+set.seed(1997)
+
+X <- df_updated %>% 
+  select(-outcome_final)
+
+# Must be factor or numeric "Class"
+model_target <- df_updated %>% 
+  select(outcome_final) %>% 
+  dummify() %>% 
+  as.data.frame()
+
+y <- model_target$outcome_final
+
+
+index <- createDataPartition(y, p = 0.80, list = FALSE, times = 1)
+train <- X[index, ]
+test <- X[-index, ]
+y_train <- y[index]
+y_test <- y[-index]
+
+```
+
+
+```{r}
+
+library(catboost)
+
+train_pool <- catboost.load_pool(data = train, label = y_train)
+
+test_pool <- catboost.load_pool(test, label = y_test)
+
+
+fit_params <- list(iterations=1000,
+                   loss_function='Logloss',
+                   depth=3,
+                   boosting_type='Ordered',
+                   bootstrap_type='MVS',
+                   early_stopping_rounds=100,
+                   use_best_model=TRUE,
+                   verbose=20,
+                   random_seed=1997)
+
+cv_params <- fit_params
+cv_params$verbose = 50
+
+# Run cross-validation
+cv_result <- catboost.cv(pool = train_pool,
+                         params = cv_params,
+                         fold_count = 3,
+                         type = 'Classical',
+                         stratified = TRUE,
+                         shuffle = FALSE)
+
+
+```
+
+
+```{r}
+
+# Find the iteration with the best average metric
+best_iteration <- which.min(cv_result$test.Logloss.mean)
+
+# Update fit_params with the best iteration
+fit_params$iterations <- best_iteration
+
+# Train final model on the full training dataset using the identified best iteration
+catboost_survival_model <- catboost.train(train_pool, 
+                                          test_pool,
+                                          params = fit_params)
+
+```
+
+##### Loss Function
+
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+
+# Get feature importance and create a tibble
+loss_function_feat_imp <- catboost.get_feature_importance(catboost_survival_model, train_pool, 'LossFunctionChange') %>%
+  as_tibble() %>% 
+  mutate(Feature = colnames(train)) %>% 
+  rename(Importance = V1) %>% # Rename columns
+  select(2,1) %>% 
+  arrange(desc(Importance)) %>% 
+  mutate(Feature = factor(Feature, levels = Feature))
+
+
+loss_function_feat_imp %>% 
+  datatable()
+
+```
+
+#### SHAP Values
+
+```{r}
+
+features <- names(X)
+
+# Calculate SHAP values
+shap_values <- catboost.get_feature_importance(catboost_survival_model, pool = train_pool, type = "ShapValues")
+
+# Extract SHAP values for each feature (excluding the last column which is the expected value)
+shap_values <- shap_values[, -ncol(shap_values)]
+
+# Convert SHAP values to a dataframe for easier analysis
+shap_df <- as.data.frame(shap_values)
+names(shap_df) <- features
+
+# Print the SHAP values dataframe
+print(shap_df)
+
+```
+
+
+```{python feature-importance}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+#| eval: true
+
+gain = survival_model.get_feature_importance(prettified=True)
+loss = survival_model.get_feature_importance(test_data, type='LossFunctionChange', prettified=True)
+
+```
+
+```{r feature-importance}
+
+#| echo: true
+#| layout-ncol: 1
+#| label: tbl-feature-importance
+#| tbl-cap: "Feature Importance"
+#| tbl-subcap: 
+#|   - "Gain"
+#|   - "Loss Function Change"
+#| warning: false
+#| message: false
+#| eval: true
+
+gain_tbl <- py$gain
+loss_tbl <- py$loss
+
+table1 <- tibble( 'Feature ID' = gain_tbl$`Feature Id`,
+                  'Importance' = gain_tbl$Importances) %>% 
+  rowid_to_column(var = "Rank") %>% 
+  as_hux() %>%
+  theme_article() %>% 
+  set_align(col=c('Rank','Importance'), value= "center") %>% 
+  set_tb_padding(2)
+
+
+table2 <- tibble( 'Feature ID' = loss_tbl$`Feature Id`,
+                  'Importance' = loss_tbl$Importances) %>% 
+  rowid_to_column(var = "Rank") %>% 
+  as_hux() %>%
+  theme_article() %>% 
+  set_align(col=c('Rank','Importance'), value= "center") %>% 
+  set_tb_padding(2)
+
+
+table1
+table2
+
+```
+
+### Predictions
+
+```{python}
+
+import pandas as pd
+
+Y_Pred_Proba_Positive = survival_model.predict_proba(X_validation)[:, 1]  # Probabilities of the positive class
+Y_Pred_Proba_Negative = survival_model.predict_proba(X_validation)[:, 0]  # Probabilities of the negative class
+
+# Converting predictions and actuals into a DataFrame for better readability, including negative class probabilities
+predictions = pd.DataFrame({
+    'Prob_Negative_Class': Y_Pred_Proba_Negative,
+    'Prob_Positive_Class': Y_Pred_Proba_Positive,
+    'Predicted': Y_Pred,
+    'Actual': Y_validation
+})
+
+# Converting predictions and actuals into a DataFrame for better readability
+predictions = pd.DataFrame({
+    'Prob_Positive_Class': Y_Pred_Proba,
+    'Predicted': Y_Pred,
+    'Actual': Y_validation
+})
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+
+library(probably)
+
+predictions <- py$predictions %>% 
+  mutate(Class = ifelse(Actual == 0, "survive", "not_survive"),
+         .pred_not_survive = Prob_Positive_Class
+         )
+
+# Define the levels you want
+factor_levels <- c("survive", "not_survive")
+
+# Set the levels of the 'actuals' column
+predictions$Class <- factor(predictions$Class, levels = rev(factor_levels))
+
+predictions %>% 
+  datatable()
+
+
+```
+
+### Calibration Plot - CatBoost
+
+```{r}
+
+predictions %>% 
+  cal_plot_logistic(Class, .pred_not_survive)
+
+```
+
+### Decision Threshold
+
+```{r message=FALSE, warning=FALSE}
+
+library(pROC)
+
+# Calculate the ROC curve
+roc_result <- roc(predictions$Actual, predictions$Prob_Positive_Class)
+
+coords <- coords(roc_result, "best", ret="threshold", best.method="closest.topleft")
+
+# Optimal threshold for maximizing true positive rate
+optimal_threshold <- coords$threshold
+
+# Apply the optimal threshold to convert probabilities to class predictions
+predictions$predicted_classes <- ifelse(predictions$Prob_Positive_Class >= optimal_threshold, 1, 0)
+
+# Output the optimal threshold
+cat("Optimal Threshold:", optimal_threshold, "\n")
+
+cat("Number of '1's predicted:", sum(predictions$predicted_classes), "\n")
+
+```
+
+### Calibrated Threshold Model Accuracy Using LogLoss
+
+```{python}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: false
+
+# Calculate metrics
+f1_updated = f1_score(r.predictions["Actual"], r.predictions["predicted_classes"])
+precision_updated = precision_score(r.predictions["Actual"], r.predictions["predicted_classes"])
+recall_updated = recall_score(r.predictions["Actual"], r.predictions["predicted_classes"])
+accuracy_updated = accuracy_score(r.predictions["Actual"], r.predictions["predicted_classes"])
+
+# Calculate the area under the curve (AUC)
+model_auc_updated = roc_auc_score(r.predictions["Actual"], r.predictions["Prob_Positive_Class"])
+conf_matrix_updated = confusion_matrix(r.predictions["Actual"], r.predictions["predicted_classes"])
+
+```
+
+```{r save-updated-accuracy-metrics}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: false
+
+model_f1_score <- py$f1_updated
+model_recall <- py$recall_updated
+model_precision <- py$precision_updated
+model_accuracy <- py$accuracy_updated
+model_roc_score <- py$model_auc_updated
+
+model_accuracy_updated <- list(
+  F1_Score = model_f1_score,
+  Recall = model_recall,
+  Precision = model_precision,
+  Accuracy = model_accuracy,
+  ROC_Score = model_roc_score
+)
+
+saveRDS(model_accuracy_updated, here("model","model_accuracy_updated.rds"))
+
+```
+
+```{r}
+
+model_accuracy_updated <- readRDS(here('model','model_accuracy_updated.rds'))
+model_accuracy_updated
+
+```
+
+```{python eval=FALSE}
+
+import catboost
+survival_model_logloss.save_model('model/survival_model.cbm', format="cbm",export_parameters=None,pool=None)
+
+```
+
+
+```{python model-accuracy-calibrated}
+
+#| echo: true
+#| results: hide
+#| label: fig-model-accuracy-calibrated
+#| fig-subcap:
+#|   - "Confusion Matrix with Class Imbalance"
+#| warning: false
+#| message: false
+#| eval: false
+
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, precision_score, recall_score, roc_curve, roc_auc_score
+import itertools
+
+
+# Simplified class names for ticks
+class_names = ['Class 0', 'Class 1']
+# Detailed class names
+detailed_class_names = ['Class 0: Transplanted', 'Class 1: WL Mortality/Deterioration']
+
+
+normalize = conf_matrix_updated.astype('float') / conf_matrix_updated.sum(axis=1)[:, np.newaxis]
+
+plt.figure(figsize=(10, 7))
+plt.imshow(normalize, interpolation='nearest', cmap=plt.cm.Blues)
+plt.title('Confusion Matrix with Class Imbalance')
+plt.colorbar()
+
+tick_marks = np.arange(len(class_names))
+plt.xticks(tick_marks, class_names, rotation=45)
+plt.yticks(tick_marks, class_names)
+
+fmt = '.2f'
+for i, j in itertools.product(range(conf_matrix_updated.shape[0]), range(conf_matrix_updated.shape[1])):
+    plt.text(j, i, format(conf_matrix_updated[i, j], 'd') + "\n" + format(normalize[i, j], fmt),
+             horizontalalignment="center",
+             color="white" if normalize[i, j] > 0.5 else "black")
+
+plt.ylabel('True label')
+plt.xlabel('Predicted label')
+
+# Show class distribution (imbalance ratio)
+class_counts = np.bincount(r.predictions["Actual"])
+for i, count in enumerate(class_counts):
+    plt.text(i, i, f"\n\nCount: {count}", horizontalalignment="center", verticalalignment="center",
+             color="white" if normalize[i, i] > 0.5 else "black")
+
+
+# Set the titles. Main title and then a subtitle with detailed class names.
+plt.suptitle('Confusion Matrix with Class Imbalance', fontsize=16)
+plt.title(detailed_class_names, fontsize=10, style='italic')
+
+# Adjust the layout to make room for the main title
+plt.tight_layout(rect=[0, 0.03, 1, 0.95]) 
+
+# Save the image in high resolution
+plt.savefig('images/model_accuracy2.png', dpi=1200)
+
+```
+![Updated Confusion Matrix](images/model_accuracy2.png){#fig-model-accuracy2}
+
+### Shapley Value Feature Importance Plots
+
+CatBoost creates 4 different numerical encodings for each categorical feature by default. When we call get_feature_importances method we get aggregated across all the encodings the importance for the categorical feature.
+
+The reason for grey color is either NAs or categorical values that cannot be scaled to high or low. <https://mlconference.ai/blog/tutorial-explainable-machine-learning-with-python-and-shap/>
+
+<br>
+
+
+```{python shap-setup}
+
+#| eval: false
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+import shap
+
+explainer = shap.TreeExplainer(survival_model)
+shap_values = explainer(X)
+    
+```
+

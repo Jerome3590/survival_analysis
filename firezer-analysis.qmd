@@ -1,0 +1,1547 @@
+---
+title: "Firezer Data Analysis"
+author: "Michael D. Porter"
+date: "June 6, 2023"
+format:
+  html:
+    #self-contained: true
+    # embed-resources: true
+    toc: true
+    df-print: paged
+    fontsize: "11pt"
+knitr:
+  opts_chunk: 
+    echo: false
+    out.width: "60%"
+---
+
+```{r set-up, include=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(here)
+theme_set(theme_bw())
+#knitr::opts_chunk$set(echo = FALSE, out.width="60%")
+```
+
+```{r}
+#: Set directories for data and saving
+dir_data = "data"
+```
+
+# Changes
+
+- (June 6, 2023) Added:
+    - GFR (Hyp 2)
+    - Cause of Death == CVA (Hyp 2)
+    - Mechanism of Death (Hyp 2)
+    - Circumstance of Death (Hyp 2)
+    - CDC High Risk Donor (Hyp 2)
+    - Donor/Candidate Weight Ratio (Hyp 4)
+    - Listing Center Volume (Hyp 4)
+    <!-- - Drug Use Donor -->
+    <!-- - Hepatitis B,C Donor -->
+
+# Overview
+
+- There is a high variability in donor utilization across OPOs.
+
+- Hypothesis 1: the variability is due to donor management practices.
+    - This is explored by comparing the distributions of clinically relevant donor measurements across OPOs.
+    - We split the OPOs into two groups: top 20% utilization, bottom 20% utilization.
+    - We compare the values from a set of clinically relevant donor measurements **that are under direct control of the OPO** in each group.
+    - If the distributions of the values differ between groups then evidence for different OPO management practices.
+
+- Hypothesis 2: the variability is due to differences in donor attributes.
+    - We examine the distribution of donor attributes that may influence acceptance:
+        - Blood type, Cause of Death, CPR, Age, Weight, Height, etc.
+    - If the distributions differ between groups then evidence that utilization variability could be due to the OPOs managing different types of donors.
+
+- Hypothesis 3: the variability is due to the geographic proximity of an OPOs Donor Hospitals to available Transplant Centers. 
+    - The distance between the donor hospital and transplant center is a proxy for ischemic time, a potentially important consideration for acceptance. 
+    - Differences in the distance distributions could explain OPO utilization.
+    
+
+- Hypothesis 4: the variability is due to listing center acceptance practices.
+    - Centers may have different acceptance practices related to how they consider patient status, distance, etc. 
+    - We analyze hypothesis 4 in other places.
+
+```{r functions}
+
+#: round number to specific number of decimal places
+digits <- function(x, k=2) formatC(x, digits=k, format="f")
+
+median_CI <- function(x){
+  x = x[!is.na(x)]
+  med = median(x)
+  ind = qbinom(c(.025,.975), size=length(x), prob=0.5)
+  CI = sort(x)[ind]
+  tibble(
+    lower = CI[1], median = med, upper=CI[2], n = length(x)
+  )
+}
+
+mean_CI <- function(x){
+  x = x[!is.na(x)]
+  n = length(x)
+  mu = mean(x)
+  se = sd(x)/sqrt(n)
+  cl = qt(.975, n-1)
+  tibble(
+    lower = mu - cl*se, mean = mu, upper = mu+cl*se, n
+  )
+}
+
+prop_CI <- function(x, includeNA = TRUE){
+  if(!includeNA)  x = x[!is.na(x)]
+  n = length(x)
+  n1 = sum(x, na.rm=TRUE)
+  stat = prop.test(n1, n)
+  CI = stat$conf.int
+  tibble(
+    lower = CI[1], p = n1/n, upper = CI[2], n
+  )
+}
+
+test_mean <- function(x, y){
+  x = x[!is.na(x)]
+  y = y[!is.na(y)]
+  test = t.test(x, y)
+  tibble(
+    p.value = test$p.value,
+    mean_diff = mean(x, na.rm=TRUE) - mean(y, na.rm=TRUE),
+    method = test$method,
+    n.x = length(x), 
+    n.y = length(y)
+  )
+}
+
+test_median <- function(x, y){
+  x = x[!is.na(x)]
+  y = y[!is.na(y)]
+  test = wilcox.test(x, y)
+  tibble(
+    p.value = test$p.value, 
+    median_diff = median(x, na.rm=TRUE) - median(y, na.rm=TRUE),
+    method = test$method,
+    n.x = length(x), 
+    n.y = length(y)
+  )
+}
+
+test_prop <- function(x, y){
+  x = x[!is.na(x)]
+  y = y[!is.na(y)]
+  test = prop.test(c(sum(x), sum(y)), c(length(x), length(y)))
+  tibble(
+    p.value = test$p.value, 
+    p_diff = mean(x) - mean(y),
+    method = test$method,
+    p.x = mean(x), 
+    p.y = mean(y),
+    n.x = length(x), 
+    n.y = length(y)
+  )
+}
+
+test_cat <- function(x, y, includeNA = TRUE){
+  if(!includeNA){
+    x = x[!is.na(x)]
+    y = y[!is.na(y)]
+  }
+  
+  data = bind_rows(
+    tibble(x=x), 
+    tibble(x=y), 
+    .id = "group"
+  ) %>% 
+    count(x, group) %>% 
+    spread(x, n, fill = 0L) %>% select(-group) %>% 
+    as.matrix 
+  
+  test = data %>% chisq.test()
+
+  tibble(
+    p.value = test$p.value,
+    method = test$method
+  )
+  
+}
+
+```
+
+# OPO Variability
+
+## OPO stats
+
+```{r load-data, message=FALSE}
+opo = read_csv(file.path(dir_data, "opo.csv"))
+
+opo2 = opo %>% 
+  filter(OPO_CTR_CODE != "Unknown") %>% 
+  mutate(
+    quantile = percent_rank(final_accept_rate),
+    OPO_Group = case_when(
+      quantile <= 0.20 ~ "Group 0",
+      quantile >= 0.80 ~ "Group 2",
+      TRUE ~ "Group 1",
+    ) %>% factor(str_c("Group ", 0:2))
+  ) 
+
+opo_order = opo2 %>% arrange(final_accept_rate) %>% pull(OPO_CTR_CODE)
+
+PTR = read_csv(file.path(dir_data, "PTR_final.csv"))
+cross_walk = PTR %>% 
+  distinct(DONOR_ID, OPO_CTR_CODE) %>% 
+  filter(OPO_CTR_CODE != "Unknown") %>% 
+  left_join(opo2 %>% select(OPO_CTR_CODE, OPO_Group), by="OPO_CTR_CODE")
+```
+
+There were `r n_distinct(opo2$OPO_CTR_CODE)` OPOs operating during the 10 year period. Note: `OPO = 06913` doesn't have a name associated with, but does have donors most years so moving ahead with it. All offers associated with an "Unknown" OPO were removed.
+
+```{r}
+opo2 %>% arrange(final_accept_rate)
+```
+
+The donor final accept rate varies from `r min(opo2$final_accept_rate) %>% digits(3)` to `r max(opo2$final_accept_rate) %>% digits(3)`.
+
+The OPOs were grouped into 3 segments: `Group 0` are the 12 (20%) that have the lowest final acceptance rate. `Group 2` are the 12 (20%) with largest final acceptance rate. `Group 1` are the 35 (60%) with inbetween final acceptance rate.
+
+```{r}
+opo2 %>% 
+  group_by(OPO_Group) %>% 
+  summarize(
+    n_OPOs = n(),
+    avg_donors_per_opo = mean(n_donors),
+    donors = sum(n_donors), 
+    offers = sum(n_offers), 
+    accepts=  sum(n_accepts), 
+    final_accept_rate = accepts/donors
+  )
+```
+
+# Hypothesis 1: Variability due to Donor Management
+
+## Analysis
+
+The following analyses compare donor measurements and attributes between the OPO groups.
+
+The p-value estimates depend on the parameter we want to test. Note that these tests only compares `Group 0` with `Group 2`. The `Group 1` results are only provided in the plot and table, but not considered for the p-value estimates.
+
+-   Median: The p-value is based on the two-sample Wicoxon Rank Sum Test (also known as Mann-Whitney U test) <https://data.library.virginia.edu/the-wilcoxon-rank-sum-test/>.
+
+-   Mean: the p-value is based on the Welch Two Sample t-test <https://en.wikipedia.org/wiki/Welch%27s_t-test>.
+
+-   Proportion: Chi-squared proportion test (also known as Z-test).
+
+## VIS_peak (Median)
+
+- Compare median of VIS peak values.
+
+-   Replaced missing values with VIS=0 which assumes that if there were no measurements, then no Inotropes were administered to donor.
+
+-   We report median differences and uses nonparametric test due to the high skew of VIS measurements.
+
+```{r, message=FALSE}
+Inotropes = read_csv(file.path(dir_data, "Inotropes.csv"))
+
+INO = cross_walk %>% 
+  left_join(Inotropes, by="DONOR_ID") %>% 
+  #: replace missing values with 0 
+  #  (assumes donor with no measurements had no inotropes or thyroid)
+  mutate(
+    n = coalesce(n, 0),
+    INO_count_max = coalesce(INO_count_max, 0), 
+    VIS_peak = coalesce(VIS_peak, 0), 
+    Thyroid_ever = coalesce(Thyroid_ever, 0)
+  )  
+
+INO_split = INO %>% split(.$OPO_Group)
+```
+
+```{r}
+INO %>% 
+  ggplot(aes(VIS_peak, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  coord_cartesian(xlim = c(0, 100))  + 
+  #scale_x_log10() +
+  labs(x = "Peak VIS", y = "OPO")
+```
+
+```{r}
+VIS_median_CI = INO_split %>% 
+  map("VIS_peak") %>% 
+  map_df(median_CI, .id="OPO_Group")
+```
+
+```{r}
+VIS_median_CI %>% 
+  ggplot(aes(median, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Median peak VIS")
+```
+
+```{r}
+VIS_median_CI
+```
+
+```{r}
+test_median(
+    INO_split[["Group 2"]]$VIS_peak,
+    INO_split[["Group 0"]]$VIS_peak
+  )
+```
+
+## Inotrope Count Max (Mean)
+
+- Compare mean of maximum number of inotropes
+
+- Replaced missing values with INO_count_max=0 which assumes that if there were no measurements, then no Inotropes were administered to donor.
+
+- We report mean differences and use a t-test.
+
+```{r}
+INO %>% 
+  ggplot(aes(INO_count_max, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(y = "OPO")
+```
+
+```{r}
+INO_count_CI = INO_split %>% 
+  map("INO_count_max") %>% 
+  map_df(mean_CI, .id="OPO_Group")
+```
+
+```{r}
+INO_count_CI %>% 
+  ggplot(aes(mean, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Mean max inotrope count")
+```
+
+```{r}
+INO_count_CI
+```
+
+```{r}
+test_mean(
+    INO_split[["Group 2"]]$INO_count_max,
+    INO_split[["Group 0"]]$INO_count_max
+  )
+```
+
+## Abnormal Blood Pressure 
+
+- Compare mean proportion of measurements abnormal
+
+-   We report mean differences and use a t-test.
+
+```{r, message=FALSE}
+bp = read_csv(file.path(dir_data,"blood-pressure.csv") )
+# TODO: check missing values in bp  
+
+BP = cross_walk %>% 
+  left_join(bp, by="DONOR_ID") %>% 
+  mutate(BP_abnormal_prop = BP_low_prop + BP_high_prop)
+
+BP_split = BP %>% split(.$OPO_Group)
+```
+
+```{r}
+BP %>% 
+  ggplot(aes(BP_abnormal_prop, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(y = "OPO")
+```
+
+```{r}
+# BP %>% 
+#   ggplot(aes(BP_abnormal_prop, fill = OPO_Group, color=OPO_Group)) + 
+#   geom_density(alpha = .20) + 
+#   labs(x = "")
+```
+
+```{r}
+BP_CI = BP_split %>% 
+  map("BP_abnormal_prop") %>% 
+  map_df(mean_CI, .id="OPO_Group")
+```
+
+```{r}
+BP_CI %>% 
+  ggplot(aes(mean, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Mean max inotrope count")
+```
+
+```{r}
+BP_CI 
+```
+
+```{r}
+test_mean(
+    BP_split[["Group 2"]]$BP_abnormal_prop,
+    BP_split[["Group 0"]]$BP_abnormal_prop
+  )
+```
+
+## ECHO Abnormal
+
+-   Comparing proportion of ECHOs that are abnormal.
+
+```{r, message=FALSE}
+echo = read_csv(file.path(dir_data, "echo.csv"))
+
+ECHO = cross_walk %>% 
+  left_join(echo, by="DONOR_ID") 
+
+ECHO_split = ECHO %>% split(.$OPO_Group)
+```
+
+```{r}
+ECHO %>% 
+  count(OPO_Group, echo_any_abnormal) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(echo_any_abnormal, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+ECHO_split %>% 
+  map("echo_any_abnormal") %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+test_prop(
+    ECHO_split[["Group 2"]]$echo_any_abnormal,
+    ECHO_split[["Group 0"]]$echo_any_abnormal
+  )
+```
+
+`Group 0` also has many more missing Echos. If we assume that missing Echo indicates its normal, then the difference is not significant. **Is this a good assumption?**
+
+```{r}
+# assuming missing indicates NORMAL
+test_prop(
+    coalesce(ECHO_split[["Group 2"]]$echo_any_abnormal, FALSE),
+    coalesce(ECHO_split[["Group 0"]]$echo_any_abnormal, FALSE)
+  )
+```
+
+## ECHO Improves
+
+-   Only compares the donors that had an Abnormal Echo and at least one subsequent Echo.
+
+```{r}
+ECHO %>% 
+  filter(echo_any_abnormal) %>% 
+  count(OPO_Group, echo_improves) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(echo_improves, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+ECHO_Abnl_split = ECHO_split %>% 
+  map(~filter(., echo_any_abnormal)) 
+
+ECHO_Abnl_split %>% 
+  map("echo_improves") %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+test_prop(
+    ECHO_Abnl_split[["Group 2"]]$echo_improves,
+    ECHO_Abnl_split[["Group 0"]]$echo_improves
+  )
+```
+
+## ECHO Worsens
+
+-   Only compares the donors that had a Normal Echo and at least one subsequent Echo.
+
+```{r}
+ECHO %>% 
+  filter(echo_any_normal) %>% 
+  count(OPO_Group, echo_worsens) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(echo_worsens, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+ECHO_Normal_split = ECHO_split %>% 
+  map(~filter(., echo_any_normal)) 
+
+ECHO_Normal_split %>% 
+  map("echo_worsens") %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+test_prop(
+    ECHO_Normal_split[["Group 2"]]$echo_worsens,
+    ECHO_Normal_split[["Group 0"]]$echo_worsens
+  )
+```
+
+## ECHO final
+
+- Compares proportion of final Echos that are abnormal.
+
+```{r}
+ECHO %>% 
+  count(OPO_Group, echo_final_abnormal) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(echo_final_abnormal, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+ECHO_split %>% 
+  map("echo_final_abnormal") %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+test_prop(
+    ECHO_split[["Group 2"]]$echo_final_abnormal,
+    ECHO_split[["Group 0"]]$echo_final_abnormal
+  )
+```
+
+Again, we see that `Group 0` has a large number of donors with missing Echos. If these can be assumed to be normal, then the difference between groups is much reduced. **Is this a good assumption?**
+
+```{r}
+# Treats Missing as Normal
+test_prop(
+    coalesce(ECHO_split[["Group 2"]]$echo_final_abnormal, FALSE),
+    coalesce(ECHO_split[["Group 0"]]$echo_final_abnormal, FALSE)
+  )
+```
+
+## Thyroid Hormone 
+
+- Compare proportion of offers that donor has been administered Thyroid.
+
+-   Replaced missing values with Thyroid_ever=0 which assumes that if there were no measurements, then no Thyroid was administered to donor. <!-- Treating missing values as **No Thyroid (Thyroid_ever = 0)**. -->
+
+```{r}
+cross_walk %>% 
+  left_join(Inotropes, by="DONOR_ID") %>% 
+  mutate(Thyroid_ever = as.character(Thyroid_ever)) %>% 
+  count(OPO_Group, Thyroid_ever) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(Thyroid_ever, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+Thyroid_CI = INO_split %>% 
+  map("Thyroid_ever") %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+Thyroid_CI %>% 
+  ggplot(aes(p, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Proportion of thryoid ever given")
+```
+
+```{r}
+Thyroid_CI
+```
+
+```{r}
+test_prop(
+    INO_split[["Group 2"]]$Thyroid_ever,
+    INO_split[["Group 0"]]$Thyroid_ever
+  )
+```
+
+It does appear that `Group 0` administered Thyroid at a much higher rate then the other groups.
+
+## Troponin-I Peak levels (mean)
+
+```{r, message=FALSE}
+troponin = read_csv(file.path(dir_data, "troponin.csv"))
+
+TROPONIN = cross_walk %>% 
+  left_join(troponin, by="DONOR_ID") %>% 
+  #: remove missing values 
+  filter(!is.na(TROPONIN_avg)) 
+
+TROPONIN_split = TROPONIN %>% split(.$OPO_Group)
+```
+
+```{r}
+TROPONIN %>% 
+  ggplot(aes(TROPONIN_peak, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  coord_cartesian(xlim = c(0, 5)) +
+  labs(y = "OPO")
+```
+
+```{r}
+Troponin_CI = TROPONIN_split %>% 
+  map("TROPONIN_peak") %>% 
+  map_df(mean_CI, .id="OPO_Group")
+```
+
+```{r}
+Troponin_CI %>% 
+  ggplot(aes(mean, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Mean peak TROPONIN level")
+```
+
+```{r}
+Troponin_CI
+```
+
+```{r}
+test_mean(
+    TROPONIN_split[["Group 2"]]$TROPONIN_peak,
+    TROPONIN_split[["Group 0"]]$TROPONIN_peak
+  )
+```
+
+
+
+
+
+# Hypothesis 2: the variability is due to differences in donor attributes.
+
+```{r, message=FALSE}
+donor_data = read_csv(file.path(dir_data, "donor_data.csv"))
+DONOR = cross_walk %>% 
+  left_join(donor_data, by="DONOR_ID") %>% 
+  mutate(COD_CVA = COD_DON == "CVA")
+
+DONOR_split = DONOR %>% split(.$OPO_Group)
+```
+
+## Donor Age
+
+- Compare mean age of donors at time of offer 
+
+```{r}
+AGE = PTR %>% 
+  filter(OPO_CTR_CODE != "Unknown") %>% 
+  left_join(opo2 %>% select(OPO_CTR_CODE, OPO_Group), by="OPO_CTR_CODE") %>% 
+  select(AGE_DON, OPO_Group)
+
+AGE_split = AGE %>% split(.$OPO_Group)
+```
+
+```{r}
+AGE_CI = AGE_split %>% 
+  map("AGE_DON") %>% 
+  map_df(mean_CI, .id="OPO_Group")
+```
+
+```{r}
+AGE_CI %>% 
+  ggplot(aes(mean, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Mean Donor Age")
+```
+
+```{r}
+AGE %>% 
+  ggplot(aes(AGE_DON, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Donor Age", y = "OPO")
+```
+
+```{r}
+AGE %>% 
+  ggplot(aes(AGE_DON, fill = OPO_Group, color=OPO_Group)) + 
+  geom_density(alpha = .20) + 
+  labs(x = "Donor Age")
+```
+
+```{r}
+AGE_CI
+```
+
+```{r}
+test_mean(
+    AGE_split[["Group 2"]]$AGE_DON,
+    AGE_split[["Group 0"]]$AGE_DON
+  )
+```
+
+While the Donor Age difference between groups is significance, the clinical difference between 11.2 and 12.1 is probably not strong.
+
+## Donor Weight
+
+- Compare mean weight of donors
+
+```{r}
+DONOR %>% 
+  ggplot(aes(WEIGHT_DON_KG, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Donor Weight (KG)", y = "OPO")
+```
+
+```{r}
+WEIGHT_CI = DONOR_split %>% 
+  map("WEIGHT_DON_KG") %>% 
+  map_df(mean_CI, .id="OPO_Group")
+```
+
+```{r}
+WEIGHT_CI %>% 
+  ggplot(aes(mean, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Mean Donor Weight (KG)")
+```
+
+```{r}
+WEIGHT_CI
+```
+
+```{r}
+test_mean(
+    DONOR_split[["Group 2"]]$WEIGHT_DON_KG,
+    DONOR_split[["Group 0"]]$WEIGHT_DON_KG
+  )
+```
+
+Not much difference in Donor weights
+
+## Donor Height
+
+- Compare mean height of donors
+
+```{r}
+DONOR %>% 
+  ggplot(aes(HEIGHT_DON_CM, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Donor Height", y = "OPO")
+```
+
+```{r}
+HEIGHT_CI = DONOR_split %>% 
+  map("HEIGHT_DON_CM") %>% 
+  map_df(mean_CI, .id="OPO_Group")
+```
+
+```{r}
+HEIGHT_CI %>% 
+  ggplot(aes(mean, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Mean Donor Height (cm)")
+```
+
+```{r}
+HEIGHT_CI
+```
+
+```{r}
+test_mean(
+    DONOR_split[["Group 2"]]$HEIGHT_DON_CM,
+    DONOR_split[["Group 0"]]$HEIGHT_DON_CM
+  )
+```
+
+Not much difference in Donor heights
+
+## Blood Type
+
+
+- Compare proportion of Blood Types
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, ABO_DON) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(ABO_DON, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, ABO_DON) %>% 
+  group_by(OPO_Group) %>% 
+  mutate(p = n / sum(n), moe = 1.96*sqrt(p*(1-p)/n)) %>% 
+  transmute(
+    OPO_Group,
+    ABO_DON,
+    lower = pmax(0, p - moe),
+    p = p,
+    upper = pmin(1, p + moe),
+    n = n
+    ) %>% arrange(ABO_DON, OPO_Group)
+```
+
+
+Group Test:
+
+```{r}
+test_cat(
+    DONOR_split[["Group 2"]]$ABO_DON,
+    DONOR_split[["Group 0"]]$ABO_DON
+  )
+```
+
+Individual Tests:
+
+Individual tests (ordered by p-value):
+
+```{r, warning=FALSE}
+map_df(
+  unique(DONOR$ABO_DON) %>% sort %>% set_names(.), 
+  ~test_prop(
+    DONOR_split[["Group 2"]]$ABO_DON == .x,
+    DONOR_split[["Group 0"]]$ABO_DON == .x
+  ), .id = "ABO_DON"
+) %>% arrange(p.value)
+```
+No statistical difference in Blood Type.
+
+## CPR
+
+- Compare proportion of donors that had CPR.
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, CPR_ADMIN) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(CPR_ADMIN, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+f_CPR <- function(x){
+  case_when(
+    x == "Yes" ~ 1L,
+    x == "No"  ~ 0L,
+    TRUE ~ NA_integer_)
+}
+DONOR_split %>% 
+  map("CPR_ADMIN") %>% 
+  map(f_CPR) %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+test_prop(
+    DONOR_split[["Group 2"]]$CPR_ADMIN %>% f_CPR,
+    DONOR_split[["Group 0"]]$CPR_ADMIN %>% f_CPR
+  )
+```
+
+## Cause of Death
+
+- Compare Cause of Death distributions.
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, COD_DON) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(COD_DON, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") + coord_flip()
+```
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, COD_DON) %>% 
+  group_by(OPO_Group) %>% 
+  mutate(p = n / sum(n), moe = 1.96*sqrt(p*(1-p)/n)) %>% 
+  transmute(
+    OPO_Group,
+    COD_DON,
+    lower = pmax(0, p - moe),
+    p = p,
+    upper = pmin(1, p + moe),
+    n = n
+    ) %>% arrange(COD_DON, OPO_Group)
+```
+
+```{r}
+test_cat(
+    DONOR_split[["Group 2"]]$COD_DON,
+    DONOR_split[["Group 0"]]$COD_DON
+  )
+```
+
+### Cause of Death = CVA
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, COD_CVA) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(COD_CVA, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") 
+```
+
+```{r}
+DONOR_split %>% 
+  map("COD_CVA") %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+```{r}
+test_prop(
+    DONOR_split[["Group 2"]]$COD_CVA,
+    DONOR_split[["Group 0"]]$COD_CVA 
+  )
+```
+
+### Individual COD Analysis
+Individual tests (ordered by p-value):
+
+```{r, warning=FALSE}
+map_df(
+  unique(DONOR$COD_DON) %>% sort %>% set_names(.), 
+  ~test_prop(
+    DONOR_split[["Group 2"]]$COD_DON == .x,
+    DONOR_split[["Group 0"]]$COD_DON == .x
+  ), .id = "COD_DON"
+) %>% arrange(p.value)
+```
+
+While there is a statistical difference in proportion of Cause of Death between Group 0 and 2, this is driven primarily by Head Trauma, CNS Tumor, and Anoxia. A test of difference in proportion of Cause of Death = CVA is not statistically significant. 
+
+
+
+## Mechanism of Donor Death
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, DEATH_MECH_DON) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(DEATH_MECH_DON, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") + coord_flip()
+```
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, DEATH_MECH_DON) %>% 
+  group_by(OPO_Group) %>% 
+  mutate(p = n / sum(n), moe = 1.96*sqrt(p*(1-p)/n)) %>% 
+  transmute(
+    OPO_Group,
+    DEATH_MECH_DON,
+    lower = pmax(0, p - moe),
+    p = p,
+    upper = pmin(1, p + moe),
+    n = n
+    ) %>% arrange(DEATH_MECH_DON, OPO_Group)
+```
+
+Group Test:
+
+```{r}
+test_cat(
+    DONOR_split[["Group 2"]]$DEATH_MECH_DON,
+    DONOR_split[["Group 0"]]$DEATH_MECH_DON
+  )
+```
+
+Individual tests (ordered by p-value):
+
+```{r, warning=FALSE}
+map_df(
+  unique(DONOR$DEATH_MECH_DON) %>% sort %>% set_names(.), 
+  ~test_prop(
+    DONOR_split[["Group 2"]]$DEATH_MECH_DON == .x,
+    DONOR_split[["Group 0"]]$DEATH_MECH_DON == .x
+  ), .id = "DEATH_MECH_DON"
+) %>% arrange(p.value)
+```
+Group 0 has a higher proportion (17% vs. 11%) of donors with "Cardiovascular" as Mechanism of Death.
+
+
+## Circumstances of Donor Death
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, DEATH_CIRCUM_DON) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(DEATH_CIRCUM_DON, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") + coord_flip()
+```
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, DEATH_CIRCUM_DON) %>% 
+  group_by(OPO_Group) %>% 
+  mutate(p = n / sum(n), moe = 1.96*sqrt(p*(1-p)/n)) %>% 
+  transmute(
+    OPO_Group,
+    DEATH_CIRCUM_DON,
+    lower = pmax(0, p - moe),
+    p = p,
+    upper = pmin(1, p + moe),
+    n = n
+    ) %>% arrange(DEATH_CIRCUM_DON, OPO_Group)
+```
+
+Group Test:
+
+```{r}
+test_cat(
+    DONOR_split[["Group 2"]]$DEATH_CIRCUM_DON,
+    DONOR_split[["Group 0"]]$DEATH_CIRCUM_DON
+  )
+```
+
+Individual tests (ordered by p-value):
+
+```{r, warning=FALSE}
+map_df(
+  unique(DONOR$DEATH_CIRCUM_DON) %>% sort %>% set_names(.), 
+  ~test_prop(
+    DONOR_split[["Group 2"]]$DEATH_CIRCUM_DON == .x,
+    DONOR_split[["Group 0"]]$DEATH_CIRCUM_DON == .x
+  ), .id = "DEATH_CIRCUM_DON"
+) %>% arrange(p.value)
+```
+Group 0 has a higher proportion (27% vs. 20%) of donors with "Natural Causes" as Circumstances of Death.
+
+
+
+## Chest Trauma
+
+- Compare proportion of donors that had Chest Trauma.
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, CHEST_TRAUMA) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(CHEST_TRAUMA, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") 
+```
+
+```{r}
+f_CHEST_TRAUMA <- function(x){
+  case_when(
+    x == "Yes" ~ 1L,
+    x == "No"  ~ 0L,
+    TRUE ~ NA_integer_)
+}
+DONOR_split %>% 
+  map("CHEST_TRAUMA") %>% 
+  map(f_CHEST_TRAUMA) %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+test_prop(
+    DONOR_split[["Group 2"]]$CHEST_TRAUMA %>% f_CHEST_TRAUMA,
+    DONOR_split[["Group 0"]]$CHEST_TRAUMA %>% f_CHEST_TRAUMA
+  )
+```
+
+
+## CDC High Risk
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, RISK_CDC_DON) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(RISK_CDC_DON, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") 
+```
+
+```{r}
+f_RISK_CDC_DON <- function(x){
+  case_when(
+    x == "Yes" ~ 1L,
+    x == "No"  ~ 0L,
+    TRUE ~ NA_integer_)
+}
+DONOR_split %>% 
+  map("RISK_CDC_DON") %>% 
+  map(f_RISK_CDC_DON) %>% 
+  map_df(prop_CI, .id="OPO_Group")
+```
+
+```{r}
+test_prop(
+    DONOR_split[["Group 2"]]$RISK_CDC_DON %>% f_RISK_CDC_DON,
+    DONOR_split[["Group 0"]]$RISK_CDC_DON %>% f_RISK_CDC_DON
+  )
+```
+
+Group 0 has a statistically higher proportion (11.6% vs. 8.2%) of CDC High Risk donors. While the difference in proportion is not that large, it could lead to a few more refusals. 
+There were a 99 high risk donors in Group 0 and 124 high risk donors in Group 2 (for a total of `r 99+124` High Risk Donors). If they were split proportionally between groups, Group 0 would have only `r round(857*(99+124)/(857+1512))` high risk donors. 
+
+
+<!-- 
+## Drug Use
+
+### History of Drug Use
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, HIST_DRUG_DON) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(HIST_DRUG_DON, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") 
+```
+
+### Current Drug Use
+
+```{r}
+DONOR %>% 
+  count(OPO_Group, CURRENT_DRUG_DON) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(CURRENT_DRUG_DON, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") 
+```
+
+## Hepatitis B and C
+
+-->
+
+## GFR 
+
+```{r, message=FALSE}
+GFR = read_csv(file.path(dir_data, "gfr.csv"))
+
+GFR = cross_walk %>% 
+  left_join(GFR, by="DONOR_ID") %>% 
+  #: remove missing values 
+  filter(!is.na(GFR_min)) %>% 
+  mutate(
+    Stage = case_when(
+      GFR_min < 15 ~ "5", 
+      GFR_min < 30 ~ "4", 
+      GFR_min < 45 ~ "3b", 
+      GFR_min < 60 ~ "3a", 
+      GFR_min < 90 ~ "2", 
+      GFR_min >= 90 ~ "1", 
+    ) %>% factor(levels = c("1", "2", "3a", "3b", "4", "5"))
+  )
+
+GFR_split = GFR %>% split(.$OPO_Group)
+```
+
+### Quantitative
+
+```{r}
+GFR %>% 
+  ggplot(aes(GFR_min, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  coord_cartesian(xlim = c(0, 200)) +
+  labs(y = "OPO")
+```
+
+```{r}
+GFR_CI = GFR_split %>% 
+  map("GFR_min") %>% 
+  map_df(median_CI, .id="OPO_Group")
+```
+
+```{r}
+GFR_CI %>% 
+  ggplot(aes(median, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Median minimum GFR level")
+```
+
+```{r}
+GFR_CI
+```
+
+```{r}
+test_median(
+    GFR_split[["Group 2"]]$GFR_min,
+    GFR_split[["Group 0"]]$GFR_min
+  )
+```
+
+### Stage of Kidney Disease 
+
+https://www.kidney.org/atoz/content/gfr
+1 is healthy kidney, 5 is kidney failure
+
+
+```{r}
+GFR %>% 
+  count(OPO_Group, Stage) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(Stage, p, fill=OPO_Group)) + 
+  geom_col(position="dodge")
+```
+
+```{r}
+GFR %>% 
+  count(OPO_Group, Stage) %>% 
+  group_by(OPO_Group) %>% 
+  mutate(p = n / sum(n), moe = 1.96*sqrt(p*(1-p)/n)) %>% 
+  transmute(
+    OPO_Group,
+    Stage,
+    lower = pmax(0, p - moe),
+    p = p,
+    upper = pmin(1, p + moe),
+    n = n
+    ) %>% arrange(Stage, OPO_Group)
+```
+
+```{r}
+test_cat(
+    GFR_split[["Group 2"]]$Stage,
+    GFR_split[["Group 0"]]$Stage
+  )
+```
+
+Individual tests (ordered by p-value):
+
+```{r, warning=FALSE}
+map_df(
+  unique(GFR$Stage) %>% sort %>% set_names(.), 
+  ~test_prop(
+    GFR_split[["Group 2"]]$Stage == .x,
+    GFR_split[["Group 0"]]$Stage == .x
+  ), .id = "Stage"
+) %>% arrange(p.value)
+```
+
+Group 0 has more donors with healthy (Stage 1) kidney function. 
+
+
+
+# Hypothesis 3: geographic proximity of an OPOs Donor Hospitals to available Transplant Centers. 
+
+```{r}
+OFFER = PTR %>% 
+  filter(OPO_CTR_CODE != "Unknown") %>% 
+  mutate(DISTANCE2 = cut(DISTANCE, c(0, 250, 500, 1000, 1500, 2500, Inf), 
+                                   include.lowest = TRUE,
+                                   ordered_result = TRUE)) %>% 
+  left_join(opo2 %>% select(OPO_CTR_CODE, OPO_Group), by="OPO_CTR_CODE") %>% 
+  mutate(YR = format(MATCH_SUBMIT_DT, "%Y")) 
+ # select(DISTANCE, DISTANCE2, PTR_SEQUENCE_NUM, YR, OPO_Group)
+
+OFFER_split = OFFER %>% split(.$OPO_Group)
+```
+
+
+## Distance (continuous) between Donor Hospital and Listing Center
+
+- Compare median distances.
+
+```{r}
+DIST_CI = OFFER_split %>% 
+  map("DISTANCE") %>% 
+  map_df(median_CI, .id="OPO_Group")
+```
+
+```{r}
+DIST_CI %>% 
+  ggplot(aes(median, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Median Distance")
+```
+
+```{r}
+OFFER %>% 
+  ggplot(aes(DISTANCE, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Distance", y = "OPO")
+```
+
+```{r}
+OFFER %>% 
+  ggplot(aes(DISTANCE, fill = OPO_Group, color=OPO_Group)) + 
+  geom_density(alpha = .20) + 
+  labs(x = "Distance")
+```
+
+```{r}
+DIST_CI
+```
+
+```{r}
+test_median(
+    OFFER_split[["Group 2"]]$DISTANCE,
+    OFFER_split[["Group 0"]]$DISTANCE
+  )
+```
+While there is a significance difference between the distribution of distances, but it is only about 70 miles (median distance). **Is this clinically significant?** Also, `Group 0` has the smallest median distance - this should indicate a *higher* utilization. 
+
+
+## Distance (discrete) between Donor Hospital and Listing Center
+
+```{r}
+OFFER %>% 
+  count(OPO_Group, DISTANCE2) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(DISTANCE2, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") + coord_flip() + labs(x="Distance")
+```
+
+```{r}
+OFFER %>% 
+  count(OPO_Group, DISTANCE2) %>% 
+  group_by(OPO_Group) %>% 
+  mutate(p = n / sum(n), moe = 1.96*sqrt(p*(1-p)/n)) %>% 
+  transmute(
+    OPO_Group,
+    DISTANCE2,
+    lower = pmax(0, p - moe),
+    p = p,
+    upper = pmin(1, p + moe),
+    n = n
+    ) %>% arrange(DISTANCE2, OPO_Group)
+```
+
+```{r}
+test_cat(
+    OFFER_split[["Group 2"]]$DISTANCE2,
+    OFFER_split[["Group 0"]]$DISTANCE2
+  )
+```
+
+`Group 0` has the largest percentage of close distances (<250 miles) - this should indicate a *higher* utilization. 
+
+
+
+## Offer Number
+
+Evidence that rejections are influenced by the number of other institutions that have previously rejected the organ. Here we compare the `PTR_SEQUENCE_NUM`, or offer number distribution. 
+
+- Compare median offer numbers
+
+```{r}
+OFFER %>% 
+  ggplot(aes(PTR_SEQUENCE_NUM, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Offer number", y = "OPO")
+```
+
+
+```{r}
+SEQ_CI = OFFER_split %>% 
+  map("PTR_SEQUENCE_NUM") %>% 
+  map_df(median_CI, .id="OPO_Group")
+```
+
+```{r}
+SEQ_CI %>% 
+  ggplot(aes(median, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Median Offer Number")
+```
+
+
+```{r}
+OFFER %>% 
+  ggplot(aes(PTR_SEQUENCE_NUM, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Offer Number", y = "OPO")
+```
+
+```{r}
+OFFER %>% 
+  ggplot(aes(PTR_SEQUENCE_NUM, fill = OPO_Group, color=OPO_Group)) + 
+  geom_density(alpha = .20) + 
+  labs(x = "Offer Number")
+```
+
+```{r}
+SEQ_CI
+```
+
+```{r}
+test_median(
+    OFFER_split[["Group 2"]]$PTR_SEQUENCE_NUM,
+    OFFER_split[["Group 0"]]$PTR_SEQUENCE_NUM
+  )
+```
+
+While this gives a significant result, it suggests a lower offer number to `Group 0`, the low utilization group. If this was repeated as a one-sided test it would not be significant.
+
+Alternatively, the low utilization OPOs may not offer donors to as many candidates. That is, they may stop offering the donor earlier than high utilization OPOs. We haven't attempted to compare this. 
+
+## Time of Match Run
+
+- Just checking that differences have nothing to do with censoring (e.g., `Group 0` have most offers in 2019 so we don't see their accepts since the match run process is still going on 12-31-2019.)
+
+- Doesn't look like the differences are large. 
+
+```{r}
+OFFER %>% 
+  distinct(MATCH_SUBMIT_DT, YR, OPO_Group) %>% 
+  count(OPO_Group, YR) %>% 
+  group_by(OPO_Group) %>% mutate(p=n/sum(n)) %>% 
+  ggplot(aes(YR, p, fill=OPO_Group)) + 
+  geom_col(position="dodge") 
+```
+
+
+
+# Hypothesis 4: Listing Center Acceptance Practice
+
+Note: The main analysis is other places.
+
+
+## Donor/Candidate Weight Ratio
+
+```{r, message=FALSE}
+candidate_data = read_csv(file.path(dir_data, "candidate_data.csv"))
+
+WEIGHT_RATIO = PTR %>% 
+  left_join(donor_data %>% select(DONOR_ID, WEIGHT_DON_KG), 
+            by = "DONOR_ID") %>% 
+  left_join(candidate_data %>% select(WL_ID_CODE, WEIGHT_CAND_KG), 
+            by = "WL_ID_CODE") %>% 
+  inner_join(cross_walk, by = c("DONOR_ID", "OPO_CTR_CODE")) %>% 
+  transmute(
+    PTR_ID, OPO_Group,
+    OPO_CTR_CODE, LISTING_CTR_CODE,
+    DONOR_ID, WL_ID_CODE, 
+    #WEIGHT_DON_KG, WEIGHT_CAND_KG, 
+    WEIGHT_RATIO = WEIGHT_DON_KG / WEIGHT_CAND_KG
+  )
+
+WEIGHT_RATIO_split = WEIGHT_RATIO %>% split(.$OPO_Group)
+```
+
+
+
+- Compare median ratios.
+
+```{r}
+WEIGHT_RATIO_CI = WEIGHT_RATIO_split %>% 
+  map("WEIGHT_RATIO") %>% 
+  map_df(median_CI, .id="OPO_Group")
+```
+
+```{r}
+WEIGHT_RATIO_CI %>% 
+  ggplot(aes(median, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Median Weight Ratio")
+```
+
+```{r, warning=FALSE}
+WEIGHT_RATIO %>% 
+  ggplot(aes(WEIGHT_RATIO, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Weight Ratio", y = "OPO")
+```
+
+```{r, eval=FALSE}
+WEIGHT_RATIO %>% 
+  ggplot(aes(WEIGHT_RATIO, fill = OPO_Group, color=OPO_Group)) + 
+  geom_density(alpha = .20) + 
+  labs(x = "Weight Ratio")
+```
+
+```{r}
+WEIGHT_RATIO_CI
+```
+
+```{r}
+test_median(
+    WEIGHT_RATIO_split[["Group 2"]]$WEIGHT_RATIO,
+    WEIGHT_RATIO_split[["Group 0"]]$WEIGHT_RATIO
+  )
+```
+While there is a significance difference between the distribution of weight ratios, it is only about 0.02 (median ratio difference). **Is this clinically significant?** Also, `Group 0` has the larger median weight ratio - this should indicate a *higher* utilization (a ratio of 1.25 has largest acceptance probability). 
+However, I don't like this analysis because we are combining all *offers* instead of *donors*. 
+
+
+## Listing Center Volume
+
+- Calculating new variables:
+    - `LISTING_CTR_TX_COUNT` is the number of *pediatric* candidate institution heart transplants for match runs during 2010-2019. 
+        - Excludes transplants from donors >= 30 
+    - `LISTING_CTR_TX_AVG` is the average number of *pediatric* candidate institution transplants for match runs during 2010-2019. 
+        - Excludes transplants from donors >= 30
+
+- The counts are the number of *pediatric heart* transplants between 2010 and 2019.     
+    - Because our PTR data excludes patients who received HR from donors over 30, there may have been a few additional transplants that aren't counted.
+
+
+```{r Transplant_CTR_Volume, message=FALSE}
+PTR_all = read_csv(file.path(dir_data, "PTR_all.csv"))
+
+TX_count = PTR_all %>% 
+  # pediatric patients who received a HR during study period
+  filter(
+    AGE_PT < 18, 
+    ORGAN_PLACED == "HR", 
+    MATCH_SUBMIT_DT >= "2010-01-01", MATCH_SUBMIT_DT <= "2019-12-31"
+  ) %>% 
+  # keep last record (sometimes there are multiple match runs and accepts)
+  group_by(WL_ID_CODE) %>% 
+    slice_max(MATCH_SUBMIT_DT, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  count(LISTING_CTR_CODE, name = "LISTING_CTR_TX_COUNT", sort=TRUE) %>% 
+  mutate(LISTING_CTR_TX_AVG = LISTING_CTR_TX_COUNT/10)
+
+TX_COUNT_split = PTR %>% 
+  left_join(TX_count, by = "LISTING_CTR_CODE") %>% 
+  inner_join(cross_walk, by = c("DONOR_ID", "OPO_CTR_CODE")) %>% 
+  split(.$OPO_Group)
+
+```
+
+
+
+- Compare median ratios.
+
+```{r}
+TX_COUNT_CI = TX_COUNT_split %>% 
+  map("LISTING_CTR_TX_AVG") %>% 
+  map_df(median_CI, .id="OPO_Group")
+```
+
+```{r}
+TX_COUNT_CI %>% 
+  ggplot(aes(median, OPO_Group, color=OPO_Group)) +
+  geom_point(aes(size=n)) + 
+  geom_linerange(aes(xmin=lower, xmax=upper)) + 
+  labs(x = "Median Weight Ratio")
+```
+
+```{r, warning=FALSE}
+TX_COUNT_split %>% bind_rows() %>% 
+  ggplot(aes(LISTING_CTR_TX_AVG, OPO_Group, fill=OPO_Group)) + 
+  geom_boxplot(alpha=.5) + 
+  labs(x = "Average number of pediatric TX per year", y = "OPO")
+```
+
+```{r, eval=FALSE}
+TX_COUNT_split %>% bind_rows() %>% 
+  ggplot(aes(LISTING_CTR_TX_AVG, fill = OPO_Group, color=OPO_Group)) + 
+  geom_density(alpha = .20) + 
+  labs(x = "Weight Ratio")
+```
+
+```{r}
+TX_COUNT_CI
+```
+
+```{r}
+test_median(
+    TX_COUNT_split[["Group 2"]]$LISTING_CTR_TX_AVG,
+    TX_COUNT_split[["Group 0"]]$LISTING_CTR_TX_AVG
+  )
+```
+
+Group 0 OPOs have offers that are made to Listing Centers with a median of 6.3 pediatric transplants per year. 
+The Group 2 OPOs have offers to Listing Centers with a lower median number of pediatric transplants per year (5.3). 
+
+

@@ -1,0 +1,856 @@
+---
+title: "Survival Analysis - Model Evaluation"
+author: "R. Jerome Dixon"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+format:
+  html:
+    toc: true
+    toc-depth: 5
+    code-fold: true
+    code-summary: "Show the code"
+    embed-resources: true
+    default-image-extension: svg
+    dpi: 600
+---
+
+```{r base-libraries}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+library(here)
+library(dplyr)
+library(readr)
+library(magrittr)
+library(spatstat)
+library(tibble)
+library(ggplot2)
+library(purrr)
+library(tidyverse)
+library(huxtable)
+library(reticulate)
+library(DT)
+library(forcats)
+
+```
+
+```{r ml-libraries}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+library(caret)
+library(glmnet)
+library(catboost)
+library(pROC)
+library(ROCR)
+library(e1071)
+library(probably)
+library(MLmetrics)
+library(DescTools)
+library(yardstick)
+library(ConfusionTableR)
+
+(options)(scipen=999)
+
+```
+
+### Survival Model Dataset
+
+```{r load-dataset}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+set.seed(1997)
+
+survival_model <- read_rds(here("data","survival_analysis.rds"))
+
+survival_model %<>%
+  mutate_if(is.character, as.factor) 
+ 
+survival_model %>% 
+  str()
+
+
+```
+
+#### Format Dataset
+
+```{r format-dataset}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+survival_model %<>%
+  mutate(INIT_STAT = as.factor(INIT_STAT)) %>%
+  mutate(INOTROPES_TCR = as.factor(INOTROPES_TCR)) %>%
+  mutate(PGE_TCR = as.factor(PGE_TCR)) %>%
+  mutate_if(is.factor, ~fct_na_value_to_level(., "Unknown")) %>% 
+  select(-c(days_total, WL_ID_CODE, PT_CODE)) %>% 
+  select(-c(BMI, PGE_TCR, WL_OTHER_ORG)) %>% 
+  filter(!is.na(outcome_final))
+
+survival_model %>% 
+  str()
+
+```
+
+- Target Label is 'outcome_final'
+
+```{r}
+
+table(survival_model$outcome_final)
+
+```
+
+
+```{r}
+
+survival_model %<>% 
+  rename(
+    `Blood.Type` = ABO,
+    `Gender` = GENDER,
+    `Race` = RACE,
+    `Diabetes` = DIAB,
+    `Height` = HEIGHT_CM,
+    `Weight` = WEIGHT_KG,
+    `ECMO.Reg` = ECMO_CAND_REG,
+    `VAD.Device.TCR` = VAD_DEVICE_TY_TCR,
+    `Ventilator.Reg` = VENTILATOR_CAND_REG,
+    `Defribilator` = IMPL_DEFIBRIL,
+    `Recent.Creatinine` = MOST_RCNT_CREAT,
+    `Inotropes.TCR` = INOTROPES_TCR,
+    `Functional.Status.Registration` = FUNC_STAT_CAND_REG,
+    `Total.Albumin.Level` = TOT_SERUM_ALBUM,
+    `Candidate.Diagnosis` = CAND_DIAG,
+    `LC.Average.Volume.Txp.Year` = LISTING_CTR_TX_AVG,
+    `Initial.Status` = INIT_STAT,
+    `Age` = AGE,
+    `LC.Code` = LISTING_CTR_CODE,
+    `LC.Median.Offer.Refusals` = median_refusals,
+    `LC.Median.Wait.Days` = median_wait_days,
+    `LC.Median.Wait.Days.Initial Status` = median_wait_days_status
+    
+  )
+
+```
+
+#### One Hot Encoding for Better Explainabiilty
+
+```{r one-hot-encode}
+
+# Create the dummy variables specification
+dummies <- dummyVars(~ `Candidate.Diagnosis`, data = survival_model, fullRank = TRUE)
+
+# Generate the dummy variables
+df_dummies <- predict(dummies, newdata = survival_model)
+
+# Bind the new dummy variables with the original dataframe minus the original factor columns
+survival_model <- cbind(survival_model[, !(names(survival_model) %in% c("Candidate.Diagnosis"))], df_dummies)
+
+names(survival_model) <- gsub("[ .]", "_", names(survival_model))
+
+# Review the structure of the updated dataframe
+survival_model %>%
+  str()
+
+```
+
+#### CatBoost Dataset Preprocessing
+
+```{r model-features}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+X <- survival_model %>% 
+  select(-outcome_final)
+
+y <- survival_model$outcome_final
+
+```
+
+```{r cat-features}
+
+cat_features <- names(X)[sapply(X, is.factor)]
+
+cat_features
+
+
+```
+
+```{r}
+
+set.seed(1997)
+
+index <- createDataPartition(y, p = 0.80, list = FALSE, times = 1)
+X_train <- X[index, ]
+X_test <- X[-index, ]
+y_train <- y[index]
+y_test <- y[-index]
+
+```
+
+#### Regression Model Data Preprocessing
+
+```{r model-dataset}
+
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+
+survival_model_lr <- survival_model %>% 
+  mutate(Age = scale(Age)[, 1],
+    Weight = scale(Weight)[, 1],
+    Height = scale(Height)[, 1],
+   `Recent_Creatinine` = scale(`Recent_Creatinine`)[, 1],
+   `Total_Albumin_Level` = scale(`Total_Albumin_Level`)[, 1]) %>% 
+  drop_na()
+
+
+X2 <- survival_model_lr %>% 
+  select(-outcome_final) %>% 
+  mutate(LC_Code = as.factor(LC_Code))
+
+y2 <- survival_model_lr$outcome_final 
+
+```
+
+
+```{r}
+
+table(survival_model_lr$outcome_final)
+
+```
+
+```{r}
+
+set.seed(1997)
+
+index <- createDataPartition(y2, p = 0.80, list = FALSE, times = 1)
+train <- X2[index, ]
+test <- X2[-index, ]
+y_train <- y2[index]
+y_test <- y2[-index]
+
+
+```
+
+### Regression
+
+```{r lr cache=TRUE}
+
+train_data <- data.frame(y=y_train, train)
+
+glm_model <- glm(y ~ ., data = train_data, family = binomial)
+
+# Summary of the logistic regression model
+lr_summary <- summary(glm_model)
+
+# Reorder columns in test_data to match train_data
+test <- test[, names(train)]
+
+test_data <- data.frame(y=y_test, test)
+
+# Predict probabilities on test set
+lr_proba <- predict(glm_model, newdata = test_data, type = "response")
+
+# Convert probabilities to class predictions
+lr_class <- ifelse(lr_proba > 0.5, 1, 0)
+names(lr_class) <- "lr_class"
+
+```
+
+```{r}
+table(lr_class)
+```
+
+
+### Lasso Penalized Logistic Regression
+
+```{r}
+
+# Create design matrices for both train and test datasets
+train_matrix <- model.matrix(~ ., data = train)
+test_matrix <- model.matrix(~ ., data = test)
+
+```
+
+
+```{r lasso-pr cache=TRUE}
+
+# Perform cross-validation to select lambda
+cv_lasso <- cv.glmnet(train_matrix, y_train, family = "binomial", alpha = 1)
+
+# Predict probabilities on test set
+lasso_proba <- predict(cv_lasso, newx = test_matrix, 
+                       type = "response", s = "lambda.min")
+names(lasso_proba) <- "lasso_proba"
+
+# Convert probabilities to class predictions
+lasso_class <- ifelse(lasso_proba > 0.5, 1, 0)
+names(lasso_class) <- "lasso_class"
+
+```
+
+```{r}
+table(lasso_class)
+```
+
+### Lasso Penalized Logistic Regression - Relaxed Fit
+
+```{r lasso-pr-relaxed cache=TRUE, eval=TRUE}
+
+# Perform cross-validation to select lambda
+cv_lasso_relaxed <- cv.glmnet(train_matrix, y_train, family = "binomial", alpha = 1, relax = TRUE)
+
+# Predict probabilities on test set
+lasso_relaxed_proba <- predict(cv_lasso_relaxed, newx = test_matrix, 
+                       type = "response", s = "lambda.min", gamma = "gamma.min")
+
+names(lasso_relaxed_proba) <- "lasso_relaxed_proba"
+
+# Convert probabilities to class predictions
+lasso_relaxed_class <- ifelse(lasso_relaxed_proba > 0.5, 1, 0)
+names(lasso_relaxed_class) <- "lasso_relaxed_class"
+
+```
+
+```{r}
+table(lasso_relaxed_class)
+```
+
+### CatBoost
+
+```{r catboost}
+
+train_pool <- catboost.load_pool(data = train, label = y_train)
+
+test_pool <- catboost.load_pool(test, label = y_test)
+
+
+fit_params <- list(iterations=1000,
+                   loss_function='Logloss',
+                   depth=8,
+                   boosting_type='Ordered',
+                   bootstrap_type='MVS',
+                   early_stopping_rounds=100,
+                   use_best_model=TRUE,
+                   verbose=20,
+                   random_seed=1997)
+
+cv_params <- fit_params
+cv_params$verbose = 50
+
+# Run cross-validation
+cv_result <- catboost.cv(pool = train_pool,
+                         params = cv_params,
+                         fold_count = 3,
+                         type = 'Classical',
+                         stratified = TRUE,
+                         shuffle = FALSE)
+
+```
+
+
+```{r}
+
+# Find the iteration with the best average metric
+best_iteration <- which.min(cv_result$test.Logloss.mean)
+
+# Update fit_params with the best iteration
+fit_params$iterations <- best_iteration
+
+# Train final model on the full training dataset using the identified best iteration
+catboost_survival_model <- catboost.train(train_pool, 
+                                          test_pool,
+                                          params = fit_params)
+
+```
+
+```{r cache=TRUE}
+
+new_pool = catboost.load_pool(data=test_data)
+
+catboost_class <- catboost.predict(catboost_survival_model, new_pool, prediction_type = 'Class')
+
+catboost_proba <- catboost.predict(catboost_survival_model, new_pool, prediction_type = 'Probability')
+
+```
+
+```{r}
+table(catboost_class)
+```
+
+#### CatBoost Feature Importance
+
+##### Gain Feature Importance
+
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+
+# Get feature importance and create a tibble
+gain_feat_imp <- catboost.get_feature_importance(catboost_survival_model, train_pool, 'FeatureImportance') %>%
+  as_tibble() %>% 
+  mutate(Feature = colnames(train)) %>% 
+  rename(Importance = V1) %>% # Rename columns
+  select(2,1) %>% 
+  arrange(desc(Importance)) %>% 
+  mutate(Feature = factor(Feature, levels = Feature))
+
+
+gain_feat_imp %>% 
+  datatable()
+
+```
+
+##### Loss Function Feature Importance
+
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+
+# Get feature importance and create a tibble
+loss_function_feat_imp <- catboost.get_feature_importance(catboost_survival_model, train_pool, 'LossFunctionChange') %>%
+  as_tibble() %>% 
+  mutate(Feature = colnames(train)) %>% 
+  rename(Importance = V1) %>% # Rename columns
+  select(2,1) %>% 
+  arrange(desc(Importance)) %>% 
+  mutate(Feature = factor(Feature, levels = Feature))
+
+
+loss_function_feat_imp %>% 
+  datatable()
+
+```
+
+### Predictions on Validation/Test Set
+
+```{r cache=TRUE, warning=FALSE, message=FALSE}
+
+# Combine the vectors and create a tibble
+predictions <- cbind(y_test, lr_proba, lr_class, lasso_proba, lasso_class, lasso_relaxed_proba, lasso_relaxed_class, catboost_proba, catboost_class) %>% 
+  as_tibble(.name_repair = 'unique') 
+
+# Rename the columns
+names(predictions) <- c("y_test", "lr_proba", "lr_class", "lasso_proba", "lasso_class", "lasso_relaxed_proba", "lasso_relaxed_class", "catboost_proba", "catboost_class")
+
+predictions[, sapply(predictions, is.numeric)] <- round(predictions[, sapply(predictions, is.numeric)], 3)
+
+```
+
+
+```{r cache=TRUE}
+
+predictions %<>% 
+  mutate(Class = ifelse(y_test == 0, "survive", "not_survive"),
+         .pred_not_survive_lr = lr_proba,
+         .pred_not_survive_lasso = lasso_proba,
+         .pred_not_survive_lasso_relaxed = lasso_relaxed_proba,
+         .pred_not_survive_catboost = catboost_proba
+         )
+
+# Define the levels you want
+factor_levels <- c("survive", "not_survive")
+
+# Set the levels of the 'Class' column
+predictions$Class <- factor(predictions$Class, levels = rev(factor_levels))
+
+# Convert factor to numeric and adjust to start from 0
+predictions$numeric_Class <- as.numeric(predictions$Class) - 1
+
+predictions %>% 
+  datatable()
+
+```
+
+
+```{r}
+
+# Convert numeric vectors to factor vectors
+actuals <- factor(y_test, levels = c(0, 1), labels = c("0", "1"))
+
+truth <- factor(y_test, levels = c(0, 1), labels = c("Survived", "Did_Not_Survive"))
+
+table(truth)
+
+```
+### Calibration Plot - Regression
+
+```{r}
+
+predictions_lr <- predictions %>% 
+  select(10,11) %>% 
+  mutate(.pred_not_survive = .pred_not_survive_lr)
+
+predictions_lr %>% 
+  cal_plot_logistic(Class, .pred_not_survive)
+```
+
+#### Regression Decision Threshold
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculate the ROC curve
+roc_result_lr <- roc(predictions$y_test, predictions$lr_class)
+
+coords_lr <- coords(roc_result_lr, "best", ret="threshold", best.method="closest.topleft")
+
+# Optimal threshold for maximizing true positive rate
+optimal_threshold_lr <- coords_lr$threshold
+
+# Apply the optimal threshold to convert probabilities to class predictions
+predictions_lr$predicted_classes <- ifelse(predictions_lr$.pred_not_survive >= optimal_threshold_lr, 1, 0)
+
+# Output the optimal threshold
+cat("Optimal Threshold:", optimal_threshold_lr, "\n")
+
+cat("Number of '1's predicted:", sum(predictions_lr$predicted_classes), "\n")
+
+
+```
+
+#### Logistic Regression Confusion Matrix
+
+```{r cache=TRUE}
+
+lr_predicted <- factor(predictions_lr$predicted_classes, levels = c(0, 1))
+
+lr_cm <- ConfusionTableR::binary_class_cm(actuals, lr_predicted)
+
+glimpse(lr_cm$record_level_cm)
+
+```
+
+```{r cache=TRUE, eval=FALSE}
+
+ConfusionTableR::binary_visualiseR(train_labels = lr_predicted,
+                                   truth_labels= actuals,
+                                   class_label1 = "Survived", 
+                                   class_label2 = "Did Not Survive",
+                                   quadrant_col1 = "#28ACB4", 
+                                   quadrant_col2 = "#4397D2", 
+                                   custom_title = "Logistic Regression Confusion Matrix", 
+                                   text_col= "black")
+
+
+```
+
+![Logistic Regression Confusion Matrix](images/lr_cm.png)
+
+### Calibration Plot - Lasso Penalized Regression
+
+```{r}
+
+predictions_lasso <- predictions %>% 
+  select(10,12) %>% 
+  mutate(.pred_not_survive = .pred_not_survive_lasso)
+
+predictions_lasso %>% 
+  cal_plot_logistic(Class, .pred_not_survive)
+
+```
+
+##### Lasso Penalized Regression Decision Threshold
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculate the ROC curve
+roc_result_lasso <- roc(predictions$y_test, predictions$lasso_class)
+
+coords_lasso <- coords(roc_result_lasso, "best", ret="threshold", best.method="closest.topleft")
+
+# Optimal threshold for maximizing true positive rate
+optimal_threshold_lasso <- coords_lasso$threshold
+
+# Apply the optimal threshold to convert probabilities to class predictions
+predictions_lasso$predicted_classes <- ifelse(predictions_lasso$.pred_not_survive >= optimal_threshold_lasso, 1, 0)
+
+# Output the optimal threshold
+cat("Optimal Threshold:", optimal_threshold_lasso, "\n")
+
+cat("Number of '1's predicted:", sum(predictions_lasso$predicted_classes), "\n")
+
+
+```
+
+#### Lasso Penalized Regression Confusion Matrix
+
+```{r cache=TRUE}
+
+lasso_predicted <- factor(predictions_lasso$predicted_classes, levels = c(0, 1))
+
+lasso_cm <- ConfusionTableR::binary_class_cm(actuals, lasso_predicted)
+
+glimpse(lasso_cm$record_level_cm)
+
+
+```
+
+```{r cache=TRUE, eval=FALSE}
+
+ConfusionTableR::binary_visualiseR(train_labels = lasso_predicted,
+                                   truth_labels= actuals,
+                                   class_label1 = "Survived", 
+                                   class_label2 = "Did Not Survive",
+                                   quadrant_col1 = "#28ACB4", 
+                                   quadrant_col2 = "#4397D2", 
+                                   custom_title = "Lasso Penalized Regression Confusion Matrix", 
+                                   text_col= "black")
+```
+
+![Lasso Penalized Regression Confusion Matrix](images/lasso_cm.png)
+
+### Calibration Plot - Lasso 'Relaxed' Penalized Regression
+
+```{r}
+
+predictions_lasso_relaxed <- predictions %>% 
+  select(10,13) %>% 
+  mutate(.pred_not_survive = .pred_not_survive_lasso_relaxed)
+
+predictions_lasso_relaxed %>% 
+  cal_plot_logistic(Class, .pred_not_survive)
+
+```
+
+##### Lasso 'Relaxed' Decision Threshold
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculate the ROC curve
+roc_result_lasso_relaxed <- roc(predictions$y_test, predictions$lasso_relaxed_class)
+
+coords_lasso_relaxed <- coords(roc_result_lasso_relaxed, "best", ret="threshold", best.method="closest.topleft")
+
+# Optimal threshold for maximizing true positive rate
+optimal_threshold_lasso_relaxed <- coords_lasso_relaxed$threshold
+
+# Apply the optimal threshold to convert probabilities to class predictions
+predictions_lasso_relaxed$predicted_classes <- ifelse(predictions_lasso_relaxed$.pred_not_survive >= optimal_threshold_lasso, 1, 0)
+
+# Output the optimal threshold
+cat("Optimal Threshold:", optimal_threshold_lasso_relaxed, "\n")
+
+cat("Number of '1's predicted:", sum(predictions_lasso_relaxed$predicted_classes), "\n")
+
+```
+
+##### Lasso "Relaxed" Penalized Regression Confusion Matrix
+
+```{r cache=TRUE}
+
+lasso_relaxed_predicted <- factor(predictions_lasso_relaxed$predicted_classes, levels = c(0, 1))
+
+lasso_relaxed_cm <- ConfusionTableR::binary_class_cm(actuals, lasso_relaxed_predicted)
+
+glimpse(lasso_relaxed_cm$record_level_cm)
+
+
+```
+
+```{r cache=TRUE, eval=FALSE}
+
+ConfusionTableR::binary_visualiseR(train_labels = lasso_relaxed_predicted,
+                                   truth_labels= actuals,
+                                   class_label1 = "Survived", 
+                                   class_label2 = "Did Not Survive",
+                                   quadrant_col1 = "#28ACB4", 
+                                   quadrant_col2 = "#4397D2", 
+                                   custom_title = "Lasso 'Relaxed' Penalized Regression Confusion Matrix", 
+                                   text_col= "black")
+```
+
+![Lasso 'Relaxed' Penalized Regression Confusion Matrix](images/lasso_relaxed_cm.png)
+
+### Calibration Plot - CatBoost
+
+```{r}
+
+predictions_catboost <- predictions %>% 
+  select(10,14) %>% 
+  mutate(.pred_not_survive = .pred_not_survive_catboost)
+
+predictions_catboost %>% 
+  cal_plot_logistic(Class, .pred_not_survive)
+
+```
+
+##### CatBoost Decision Threshold
+
+```{r message=FALSE, warning=FALSE}
+
+# Calculate the ROC curve
+roc_result_catboost <- roc(predictions$y_test, predictions_catboost$predicted_classes)
+
+coords_catboost <- coords(roc_result_catboost, "best", ret="threshold", best.method="closest.topleft")
+
+# Optimal threshold for maximizing true positive rate
+optimal_threshold_catboost <- coords_catboost$threshold
+
+# Apply the optimal threshold to convert probabilities to class predictions
+predictions_catboost$predicted_classes <- ifelse(predictions_catboost$.pred_not_survive >= optimal_threshold_catboost, 1, 0)
+
+# Output the optimal threshold
+cat("Optimal Threshold:", optimal_threshold_catboost, "\n")
+
+cat("Number of '1's predicted:", sum(predictions_catboost$predicted_classes), "\n")
+
+
+```
+
+##### CatBoost Confusion Matrix
+
+```{r cache=TRUE}
+
+catboost_predicted <- factor(predictions_catboost$predicted_classes, levels = c(0, 1))
+
+catboost_cm <- ConfusionTableR::binary_class_cm(actuals, catboost_predicted)
+
+glimpse(catboost_cm$record_level_cm)
+
+```
+
+```{r cache=TRUE, eval=FALSE}
+
+ConfusionTableR::binary_visualiseR(train_labels = catboost_predicted,
+                                   truth_labels= actuals,
+                                   class_label1 = "Survived", 
+                                   class_label2 = "Did Not Survive",
+                                   quadrant_col1 = "#28ACB4", 
+                                   quadrant_col2 = "#4397D2", 
+                                   custom_title = "CatBoost Confusion Matrix", 
+                                   text_col= "black")
+```
+
+![CatBoost Confusion Matrix](images/catboost_cm.png)
+
+### Model Accuracy
+
+#### Brier Score
+
+```{r}
+
+# Calculate Brier score
+brier_lr <- yardstick::brier_class_vec(truth, preds_lr_proba)
+brier_lasso <- yardstick::brier_class_vec(truth, preds_lasso_proba_relaxed[,1])
+brier_lasso_relaxed <- yardstick::brier_class_vec(truth, preds_lasso_proba_relaxed[,1])
+brier_catboost <- yardstick::brier_class_vec(truth, preds_catboost_proba)
+
+brier_lr
+brier_lasso
+brier_lasso_relaxed
+brier_catboost
+
+```
+
+#### Log-Loss
+
+```{r}
+
+# Log-loss
+logloss_lr <- LogLoss(model_y, preds_lr_proba)
+logloss_lasso <- LogLoss(model_y, preds_lasso_proba[,1])
+logloss_lasso_relaxed <- LogLoss(model_y, preds_lasso_proba_relaxed[,1])
+logloss_catboost <- LogLoss(model_y, preds_catboost_proba)
+
+logloss_lr
+logloss_lasso
+logloss_lasso_relaxed
+logloss_catboost
+  
+```
+
+#### Mean Absolute Error
+
+```{r}
+
+# Mean Absolute Error (MAE)
+mae_lr <- MAE(model_y, preds_lr_proba)
+mae_lasso <- MAE(model_y, preds_lasso_proba)
+mae_lasso_relaxed <- MAE(model_y, preds_lasso_proba_relaxed)
+mae_catboost <- MAE(model_y, preds_catboost_proba)
+
+mae_lr
+mae_lasso
+mae_lasso_relaxed
+mae_catboost
+  
+```
+
+#### AUC
+
+```{r}
+
+# AUC
+auc_lr <- roc_auc_vec(truth, preds_lr_proba)
+auc_lasso <- roc_auc_vec(truth, preds_lasso_proba[,1])
+auc_lasso_relaxed <- roc_auc_vec(truth, preds_lasso_proba_relaxed[,1])
+auc_catboost <- roc_auc_vec(truth, preds_catboost_proba)
+
+auc_lr
+auc_lasso
+auc_lasso_relaxed
+auc_catboost
+
+```
+
+#### Precision
+
+```{r}
+
+precision_lr <- precision(truth, lr_predicted)
+precision_lasso <- precision(truth, lasso_predicted)
+precision_lasso_relaxed <- precision(truth, lasso_relaxed_predicted)
+precision_catboost <- precision(truth, catboost_predicted)
+
+precision_lr
+precision_lasso
+precision_lasso_relaxed
+precision_catboost
+
+```
+
+#### Recall
+
+```{r}
+
+recall_lr <- recall(truth, lr_predicted)
+recall_lasso <- recall(truth, lasso_predicted)
+recall_lasso_relaxed <- recall(truth, lasso_relax_predicted)
+recall_catboost <- recall(truth, catboost_predicted)
+
+recall_lr
+recall_lasso
+recall_lasso_relaxed
+recall_catboost
+
+```
+
+#### F1
+
+```{r}
+
+f1_lr <- f_meas(truth, lr_predicted)
+f1_lasso <- f_meas(truth, lasso_predicted)
+f1_lasso_relaxed <- f_meas(truth, lasso_relax_predicted)
+f1_catboost <- f_meas(truth, catboost_predicted)
+
+f1_lr
+f1_lasso
+f1_lasso_relaxed
+f1_catboost
+
+```
+

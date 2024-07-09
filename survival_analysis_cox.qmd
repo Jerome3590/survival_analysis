@@ -1,0 +1,591 @@
+---
+title: "Survival Analysis - Cox Model"
+author: "R. Jerome Dixon"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+format: 
+  html: 
+    toc: true
+    toc-depth: 5
+    code-fold: true
+    code-summary: "Show the code"
+    embed-resources: true
+    default-image-extension: svg
+    dpi: 600
+---
+
+```{r load-libraries}
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+library(here)
+library(dplyr)
+library(readr)
+library(magrittr)
+library(spatstat)
+library(tibble)
+library(ggplot2)
+library(purrr)
+library(tidyverse)
+library(huxtable)
+library(reticulate)
+
+(options)(scipen=999)
+
+```
+
+### Survival Model Dataset
+
+```{r load-dataset}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+set.seed(1997)
+
+survival_model <- read_rds(here("data","survival_analysis.rds"))
+
+survival_model %<>%
+  mutate_if(is.character, as.factor) 
+ 
+survival_model %>% 
+  str()
+
+
+```
+
+#### Format Dataset
+
+```{r format-dataset}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+library(dplyr)
+library(forcats)
+
+survival_model %<>%
+  mutate(outcome_final = ifelse(is.na(outcome_final), 0, outcome_final)) %>%
+  mutate(INIT_STAT = as.factor(INIT_STAT)) %>%
+  mutate(INOTROPES_TCR = as.factor(INOTROPES_TCR)) %>%
+  mutate(PGE_TCR = as.factor(PGE_TCR)) %>%
+  mutate_if(is.factor, ~fct_na_value_to_level(., "Unknown")) %>% 
+  select(-c(TRANSFUSIONS_CAND))
+
+
+survival_model %>% 
+  str()
+
+```
+
+#### Target Label for Censoring (Right-Censored)
+
+CatBoost uses an interesting dual encoding transformation for survival analysis. The sign (positive or negative) of the label column is used to distinguish between events and censored data.
+
+Positive values indicate the time until the event, and negative values indicate the time until censoring.
+
+```{r}
+
+survival_model %<>%
+  mutate(label = ifelse(outcome_final, days_total, -days_total))
+
+```
+
+#### Dataset Feature Columns
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+model_cb <- survival_model %>% 
+  select(!c(WL_ID_CODE, PT_CODE, days_total, outcome_final))
+
+features_cb <- model_cb %>% 
+  select(-label)
+
+target_cb <- model_cb$label
+
+evaluation_data <- survival_model %>% 
+  select(c(WL_ID_CODE, PT_CODE, days_total, outcome_final))
+
+cat_features <- names(features_cb)[sapply(features_cb, is.factor)]
+
+
+```
+
+#### Train and Test Splits
+
+```{python catboost-r-data}
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+from catboost import Pool
+from sklearn.model_selection import train_test_split
+
+# Initialize data
+X = r.model_cb
+X_eval = r.evaluation_data
+
+y = r.target_cb
+
+cat_features = r.cat_features
+
+# Split data into training and testing sets
+X_train, X_test = train_test_split(X, test_size=0.2, random_state=1997)
+
+
+vals = X_train.mode().iloc[0]
+X_train = X_train.fillna(vals)
+X_test = X_test.fillna(vals)
+
+# Extract labels for training and testing sets
+Y_train = X_train['label']
+y_test = X_test['label']
+
+# Remove label columns from X_train and X_test
+X_train = X_train.drop(columns=['label'])
+X_test = X_test.drop(columns=['label'])
+
+# Split evaluation data into training and testing sets
+eval_train, eval_test = train_test_split(X_eval, test_size=0.2, random_state=1997)
+
+# Using this object for feature importance calculations
+train_pool = Pool(X_train, label=Y_train, cat_features=cat_features)
+
+# Using this object for feature importance calculations
+test_pool = Pool(X_test, label=y_test, cat_features=cat_features)
+
+
+```
+
+#### Hyperparameter Optimization with Optuna
+
+ We implement a stratified cross-validation process for our survival analysis model, where the data is stratified based on a combination of event occurrence and time. Let's walk through what we are doing::
+
+Event Occurrence:
+
+`event_occurred = Y > 0` creates a boolean array where each element is True if the corresponding element in Y is positive (indicating an event occurred) and False otherwise (indicating censoring).
+Time Binning:
+
+`time_bins = pd.qcut(np.abs(Y), q=4, labels=False, duplicates='drop')` bins the absolute values of Y into quartiles. This means your survival times are divided into four groups with roughly equal numbers of observations. The duplicates='drop' option ensures that if there are duplicate bin edges (which can happen if there are many identical values in Y), they will be dropped to avoid errors.
+
+
+Stratification Labels:
+
+`stratification_labels = np.array([f"{e}_{t}" for e, t in zip(event_occurred, time_bins)])` combines the event occurrence and time binning information into a single label for each observation. This label is a string combining the event indicator and time bin. For example, an observation with an event and in the first time bin might have a label "True_0".
+
+
+Stratified KFold Cross-Validation:
+
+`StratifiedKFold(n_splits=2, shuffle=True, random_state=1997)` initializes a stratified KFold cross-validator with 2 folds. Stratification is based on the labels created in the previous step, ensuring that each fold is representative of the overall distribution of both the event occurrences and the time bins.
+
+The loop `for train_index, test_index in skf.split(X, stratification_labels)` then iterates over these folds. For each fold, it splits X and Y into training (X_train, Y_train) and testing (X_test, Y_test) sets based on the indices provided by the stratified splitter.
+
+
+CatBoost Pools:
+
+Inside the loop, `train_pool = Pool(X_train, label=Y_train, cat_features=cat_features)` and `test_pool = Pool(X_test, label=Y_test, cat_features=cat_features)` create CatBoost Pool objects for the training and testing sets, respectively. These Pool objects are used to train and evaluate the CatBoost model. The Pool object efficiently handles datasets with categorical features (cat_features).
+
+By combining stratified cross-validation with CatBoost training, we aim to develop a robust survival analysis model that generalizes well to new data. We make take a small hit in model accuracy but this stratification strategy ensures that each fold of the cross-validation process is balanced in terms of both the event occurrence and the distribution of survival times, which is very important in survival analysis to prevent biased estimates.
+
+
+```{python optuna-hyperparameter-optimization}
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+from sklearn.model_selection import train_test_split, StratifiedKFold
+import pandas as pd
+import catboost as cb
+import optuna
+from lifelines.utils import concordance_index
+import numpy as np
+
+
+# Convert target label from list to array
+Y = np.array(y)
+
+
+def objective(trial):
+  
+    learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3)
+    depth = trial.suggest_int("depth", 8, 12)
+    l2_leaf_reg = trial.suggest_float("l2_leaf_reg", 6, 25)
+
+    params = {
+        "iterations": 100,
+        "learning_rate": learning_rate,
+        "depth": depth,
+        "l2_leaf_reg": l2_leaf_reg,
+        "objective": "Cox",
+        "bootstrap_type": "Bernoulli",
+        "boosting_type": "Plain",
+        "early_stopping_rounds": 50
+    
+    }
+    
+   
+    event_occurred = Y > 0  # Positive Y values are events
+    time_bins = pd.qcut(np.abs(Y), q=4, labels=False, duplicates='drop')  # Quantile-based binning
+
+    # Combine event occurrence and time bins for stratification
+    stratification_labels = np.array([f"{e}_{t}" for e, t in zip(event_occurred, time_bins)])
+
+    # Initialize StratifiedKFold
+    skf = StratifiedKFold(n_splits=2, shuffle=True, random_state=1997)
+    
+    fold_evaluations = []
+
+    for train_index, test_index in skf.split(X, stratification_labels):
+    
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        Y_train, Y_test = Y[train_index], Y[test_index]
+        
+        # Update train_pool and test_pool for the current fold
+        train_pool = Pool(X_train, label=Y_train, cat_features=cat_features)
+        test_pool = Pool(X_test, label=Y_test, cat_features=cat_features)
+        
+        model = cb.CatBoostRegressor(**params)
+        model.fit(train_pool, eval_set=test_pool, verbose=False)
+        
+        Y_pred = model.predict(test_pool)
+        
+        # Event indicator: True if the value in Y is positive
+        event_occurred_test = Y_test > 0
+
+        # Time duration: absolute value of Y
+        time_duration_test = np.abs(Y_test)
+
+        # Print the event indicator and time duration for debugging
+        print("Event Indicator:", event_occurred_test)
+        print("Time Durations:", time_duration_test)
+
+        
+        ci_test = concordance_index(time_duration_test, Y_pred, event_occurred_test)
+        fold_evaluations.append(ci_test)
+
+    average_ci_metric = np.mean(fold_evaluations)
+    print(f"Average Concordance Index: {average_ci_metric}")
+    return average_ci_metric
+
+
+if __name__ == "__main__":
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=500)
+
+    print("Number of finished trials: {}".format(len(study.trials)))
+    print("Best trial:")
+    best_trial = study.best_trial
+
+    print("  Value: {}".format(best_trial.value))
+
+    print("  Params: ")
+    for key, value in best_trial.params.items():
+        print("    {}: {}".format(key, value))
+
+
+```
+
+### Final CatBoost Survival Model
+
+For survival analysis with CatBoost the best hyperparameters are actually no hyperparameters. Best concordance index was achieved with no additional Optuna hyperparameter tuning besides adjusting the number of iterations.
+
+
+```{python}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+from catboost import CatBoostRegressor, Pool, FeaturesData
+
+survival_model = CatBoostRegressor(
+    loss_function='Cox',
+    eval_metric='Cox',
+    iterations=250,
+    metric_period=25,
+    verbose=True
+)
+
+survival_model.fit(train_pool, eval_set=test_pool)
+
+
+```
+
+### Model Accuracy (C-Index)
+
+The C-statistic measures how well we can order people by their survival time (1.0 is a perfect ordering).
+
+```{python}
+#| echo: true
+#| layout-ncol: 1
+#| warning: false
+#| message: false
+#| eval: true
+
+# make the prediction using the resulting model
+preds = survival_model.predict(test_pool)
+
+```
+
+```{r c-index}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+library(survival)
+
+predictions <- py$preds
+event_times <- py$eval_test$days_total
+event_observed <- py$eval_test$outcome_final
+
+c_index <- survConcordance(Surv(event_times, event_observed) ~ predictions)
+print(paste("Concordance Index (C-index):", c_index))
+
+```
+
+### Feature Importance
+
+```{python}
+#| echo: true
+#| layout-ncol: 1
+#| warning: false
+#| message: false
+#| eval: true
+
+from catboost import CatBoostRegressor, Pool, FeaturesData
+
+gain = survival_model.get_feature_importance(prettified=True)
+
+```
+
+```{r feature-importance}
+#| echo: true
+#| layout-ncol: 1
+#| label: tbl-feature-importance
+#| tbl-cap: "Feature Importance"
+#| tbl-subcap: 
+#|   - "Gain"
+#| warning: false
+#| message: false
+#| eval: true
+
+gain_tbl <- py$gain
+
+table1 <- tibble( 'Feature ID' = gain_tbl$`Feature Id`,
+                  'Importance' = gain_tbl$Importances) %>% 
+  rowid_to_column(var = "Rank") %>% 
+  as_hux() %>%
+  theme_article() %>% 
+  set_align(col=c('Rank','Importance'), value= "center") %>% 
+  set_tb_padding(2)
+
+
+table1
+
+```
+
+
+### Shapley Value Feature Importance Plots
+
+CatBoost creates 4 different numerical encodings for each categorical feature by default. When we call get_feature_importances method we get aggregated across all the encodings the importance for the categorical feature.
+
+The reason for grey color is either NAs or categorical values that cannot be scaled to high or low. <https://mlconference.ai/blog/tutorial-explainable-machine-learning-with-python-and-shap/>
+
+<br>
+
+
+```{python shap-setup}
+#| eval: false
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+import shap
+import pickle
+
+explainer = shap.TreeExplainer(survival_model)
+shap_values = explainer(X)
+
+
+# Save SHAP Explanation object
+with open("data/shap_values.pkl", "wb") as f:
+    pickle.dump(shap_values, f)
+    
+```
+
+#### Beeswarm (Top 25 Features)
+
+```{python shap-setup2}
+#| eval: false
+#| echo: true
+#| message: false
+#| warning: false
+#| results: hide
+
+
+import matplotlib.pyplot as plt
+import shap
+import pickle
+
+plt.close()
+
+with open("data/shap_values.pkl", "rb") as f:
+    loaded_shap_values = pickle.load(f)
+
+shap.initjs()
+
+shap.plots.beeswarm(loaded_shap_values)
+plt.tight_layout()
+
+plt.savefig('images/shapley_beeswarm_chart.png', dpi=1200)
+
+```
+
+
+![Beeswarm Chart](images/shapley_beeswarm_chart.png){#fig-shap-beeswarm-chart}
+
+
+#### Bar Chart for Feature Importance
+
+```{python shapley-bar-chart}
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+#| label: fig-net-effect
+#| fig-cap: 
+#|   - "Net Effect"
+
+import matplotlib.pyplot as plt
+import shap
+import pickle
+
+shap.initjs()
+
+plt.close()
+
+with open("data/shap_values.pkl", "rb") as f:
+    loaded_shap_values = pickle.load(f)
+
+shap.plots.bar(loaded_shap_values, max_display=25)
+
+plt.tight_layout()
+
+# Save the image in high resolution
+plt.savefig('images/shapley_bar_chart.png', dpi=1200)
+
+
+```
+
+
+![Feature Importance Bar Chart](images/shapley_bar_chart.png){#fig-shap-mean-bar-chart}
+
+
+```{r}
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+# Numeric Column Indexes
+numeric_column_indexes <- which(sapply(features_cb , is.numeric))
+
+# Convert to Python index format (zero-based)
+python_numeric_column_indexes <- numeric_column_indexes - 1
+
+# Factor Column Names
+factor_column_names <- names(features_cb)[sapply(features_cb, is.factor)]
+
+# Numeric Column Names
+numeric_column_names <- names(features_cb)[sapply(features_cb, is.numeric)]
+
+
+```
+
+
+#### Beeswarm by Numerical Features Only
+
+```{python beeswarm-numerical-features}
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+#| out-width: 70%
+#| out-height: 70%
+#| label: fig-numerical-effects
+#| fig-cap: 
+#|   - "Numerical Effects"
+
+import matplotlib.pyplot as plt
+import shap
+import pickle
+
+shap.initjs()
+
+plt.close()
+
+with open("data/shap_values.pkl", "rb") as f:
+    loaded_shap_values = pickle.load(f)
+
+num_features = r.numeric_column_names
+
+# Subset the SHAP values to only include the numerical features
+numerical_shap_values = loaded_shap_values[:, num_features]
+
+# Plot the beeswarm for only the numerical features
+shap.plots.beeswarm(numerical_shap_values)
+
+plt.tight_layout()
+
+# Save the figure with desired DPI
+plt.savefig('images/shapley_beeswarm_numerical.png', dpi=1200, bbox_inches="tight")
+
+```
+
+
+
+![Numerical Beeswarm Chart](images/shapley_beeswarm_numerical.png){#fig-shap-numerical-beeswarm-chart}
+
+#### Force Plot for Key Features
+
+```{python}
+#| eval: false
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+#| out-width: 70%
+#| out-height: 70%
+#| label: fig-force-plot
+#| fig-cap: 
+#|   - "Individual Effects"
+
+# Visualize the SHAP values for a specific prediction
+shap.initjs()
+
+shap_values2 = explainer.shap_values(X)
+
+shap.force_plot(explainer.expected_value, shap_values2[0,:], X.iloc[0,:], text_rotation=45, matplotlib=True)
+
+plt.tight_layout()
+
+# Save the figure with desired DPI
+plt.savefig('images/force_plot.png', dpi=1200, bbox_inches="tight")
+
+```
+![Force Plot](images/force_plot.png){#fig-shap-numerical-beeswarm-chart}

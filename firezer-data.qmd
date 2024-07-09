@@ -1,0 +1,1159 @@
+---
+title: "Data for Firezer Project"
+author: Michael D. Porter
+date: June 6, 2023 
+format:
+  html:
+    toc: true
+    embed-resources: true
+    html-math-method: katex
+---
+
+Notes: 
+
+- Updated Nov 15, 2022 (added PTR variables)
+- Updated Jan 11, 2023 (using updated data: ECHO, OPO_CTR_CODE)
+- Updated Feb 13, 2023 (added more details; no change in data)
+- Updated Feb 15, 2023 (changed some variable names)
+- Updated Jun 06, 2023 (added donor risk variables, GFR, candidate weight/height)
+
+```{r}
+#: Set directories for data and saving
+dir_data = "data_in" 
+dir_save = "data_out"
+```
+
+
+```{r packages, include=FALSE}
+library(knitr)
+library(kableExtra)
+library(glue)
+library(skimr)
+library(lubridate)
+library(readxl)
+library(tidyverse)
+library(here)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  out.width = "40%", fig.width=6, fig.height=6,
+  message = FALSE, warning = FALSE,
+  attr.output='style="max-height: 100px;"', # vertical scroll box
+  skimr_include_summary = FALSE
+)
+options(knitr.kable.NA = '') # set missing table values to blank
+options(width = 90)
+
+library(ggplot2)
+theme_set(theme_bw())
+```
+
+```{r utils, echo=FALSE}
+#: make note in html
+library(kableExtra)
+note <- function(x, col="red") kableExtra::text_spec(x, color=col)
+
+#: round number to specific number of decimal places
+digits <- function(x, k=2) formatC(x, digits=k, format="f")
+
+#: print table
+library(kableExtra)
+print_table <- function(x, digits=3, align="r", position = "left"){
+  kbl(x, align = align, digits=digits) %>% 
+  row_spec(0, align="c") %>% 
+  kable_styling(full_width = FALSE, position = position,
+                bootstrap_options = c("striped", "hover","responsive"))
+}
+
+#: print scrollable datatable
+datatable <- function(x, k=3){
+  x %>% 
+    mutate_if(is.double, digits, k=k) %>% 
+    DT::datatable()
+}
+
+
+#: Calculate time between two date-times (year, month, day, hour, minute, second)
+library(lubridate)
+calc_dur <- function(DT1, DT2, units = "hour"){
+  int = lubridate::interval(DT1, DT2) 
+  lubridate::time_length(int, unit = units)  
+  #as.numeric(difftime(DT2, DT1, units=units)) # doesn't handle years
+}
+
+#: Function to add donor info to measurements
+add_donor_info <- function(df, donor_data=donor_data_all,
+                           gender=FALSE, age=FALSE){
+  DD = donor_data %>% 
+    distinct(DONOR_ID, GENDER_DON,AGE_DON, BRAIN_DEATH_DT) # get AGE_DON from PTR
+  if(!gender) DD = DD %>% select(-GENDER_DON)
+  if(!age) DD = DD %>% select(-AGE_DON)
+  df %>%
+    left_join(DD, by="DONOR_ID") %>% 
+    mutate(hrs_from_DBD = calc_dur(BRAIN_DEATH_DT, DT, "hours")) %>% 
+    select(-BRAIN_DEATH_DT)
+}
+
+```
+
+
+# Introduction
+
+Generate data for analysis of OPO donor management. 
+
+## Donor Population
+
+1. Donor age < 18
+2. Non DCD Donor
+3. Match Run between 2010-2019
+    
+## Candidate Population
+
+1. All candidates (peds and adults) who were offered a pediatric heart during a qualified match run.  
+    
+## Data Sets
+
+1. PTR offer data
+2. Donor Static data (deceased donor data)
+3. DonorNet measurements
+4. ECHO measurements
+
+
+# Data
+
+
+## Offer Data (PTR)
+
+```{r load-PTR-data}
+PTR_all = read_rds(file.path(dir_data, "PTR.rds")) 
+# mutate(OPO_CTR_CODE = recode(OPO_CTR_CODE, "10726" = "25581" ))
+```
+
+## Donor Attributes (Decesed Donor Data)
+
+```{r load-donor-data}
+donor_data_all = read_rds(file.path(dir_data, "donor_data.rds")) %>% 
+  semi_join(PTR_all, by="DONOR_ID")
+```
+
+## Waitlist Candidate History
+
+```{r load-wl-history}
+WL_hist = read_rds(file.path(dir_data, "cand_wl_hist.rds"))
+```
+
+## Waitlist Candidate Attributes
+
+```{r load-thoracic}
+thoracic = read_rds(file.path(dir_data, "thoracic.rds")) %>% 
+  semi_join(PTR_all, by="WL_ID_CODE")
+```
+
+
+## Add additional info to PTR data
+```{r update-PTR}
+#: Get waitlist status and waitlist organ at time of match run
+WL_STATUS = PTR_all %>% select(PTR_ID, WL_ID_CODE, MATCH_SUBMIT_DT) %>% 
+  left_join(WL_hist, by="WL_ID_CODE") %>% 
+  filter(CHG_DT < MATCH_SUBMIT_DT) %>% 
+  group_by(PTR_ID) %>% 
+    slice_max(CHG_DT, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  select(PTR_ID, ORG_CAND = ORG, STATUS_CAND = STATUS)
+
+#: add info to PTR
+#   - ORG_CAND, STATUS_CAND
+#   - If PTR is missing DOB_DON (and hence AGE_DON), use AGE_DON from donor_data_all
+PTR = PTR_all %>% 
+  # add ORG_CAND, STATUS_CAND
+  left_join(WL_STATUS, by="PTR_ID") %>%
+  # add donor age
+  left_join(
+    donor_data_all %>% select(DONOR_ID, AGE_DON_donor_data = AGE_DON), 
+    by = "DONOR_ID"
+  ) %>% 
+  mutate(
+    AGE_DON = coalesce(AGE_DON, AGE_DON_donor_data)
+  ) %>% 
+  select(-AGE_DON_donor_data, -DON_ID, -CLASS)
+
+rm(WL_hist, WL_STATUS)
+```
+
+## Getting Offer Population
+
+There are `r nrow(PTR)` total offers.   
+
+### 1. Match Run between 2010-01-01 and 2019-12-31 (10 years)
+
+```{r PTR1}
+study_period = c("2010-01-01", "2019-12-31")
+PTR1 = PTR %>% 
+  filter(
+    as.Date(MATCH_SUBMIT_DT) >= study_period[1], 
+    as.Date(MATCH_SUBMIT_DT) <= study_period[2]
+  )
+```
+
+This leaves a total of `r n_distinct(PTR1$DONOR_ID)` donors, `r n_distinct(PTR1$WL_ID_CODE)` candidates, and `r nrow(PTR1)` offers.
+
+### 2. Pediatric donors (Age at time of match run < 18)
+
+```{r, echo=FALSE}
+# Donors with estimated age
+tmp = PTR1 %>% mutate(rem = AGE_DON %% 1) %>% filter(rem == 0) %>% 
+  select(DONOR_ID)
+```
+
+- Note: `r n_distinct(tmp$DONOR_ID)` donors (`r nrow(tmp)` offers) from the PTR records didn't have DOB and thus couldn't calculate `AGE_DON` at time of match run. For these cases, we estimated the age from the `donor_data_all` (deceased donor) records. While this may introduce a few donors that are actually $\geq 18$ at time of match run, there is not expected to be many. 
+<!-- - Note: this removes `r PTR1 %>% filter(is.na(AGE_DON)) %>% pull(DONOR_ID) %>% n_distinct` donors, and a total of `r sum(is.na(PTR1$AGE_DON))` offers, with missing DOB (and consequently age) -->
+
+```{r PTR2}
+PTR2 = PTR1 %>% filter(AGE_DON < 18)
+```
+
+This leaves a total of `r n_distinct(PTR2$DONOR_ID)` donors, `r n_distinct(PTR2$WL_ID_CODE)` candidates, and `r nrow(PTR2)` offers.
+
+
+
+### 3. Exclude DCD (donation after cardiac death) donors 
+
+```{r PTR3}
+DCD_donors = donor_data_all %>% filter(NON_HRT_DON == "Y") %>% select(DONOR_ID) 
+PTR3 = PTR2 %>% anti_join(DCD_donors, by="DONOR_ID")
+```
+
+There were `r semi_join(DCD_donors, PTR2, by="DONOR_ID") %>% nrow()` DCD donors, and a total of `r nrow(PTR2) - nrow(PTR3)` offers, that were removed. 
+
+This leaves a total of `r n_distinct(PTR3$DONOR_ID)` donors, `r n_distinct(PTR3$WL_ID_CODE)` candidates, and `r nrow(PTR3)` offers.
+
+### 4. Multiple Match Runs
+
+```{r, echo=FALSE}
+multiple_match_runs = PTR3 %>% 
+  group_by(DONOR_ID) %>% 
+  summarize(
+    n_match_runs = n_distinct(MATCH_ID_CODE)
+  ) %>% 
+  filter(n_match_runs > 1)
+
+multiple_donor_candidate_offers = PTR3 %>% 
+  count(DONOR_ID, WL_ID_CODE) %>% filter(n>1)
+```
+
+A donor can be offered on multiple match runs. This happens if, for example, test results come back after the initial match run has been initiated. When this occurs, the donor can be offered to the same candidate multiple times since the match run list usually doesn't change much. 
+
+This is an example of a donor who was initially refused by candidate (WL_ID_CODE) 1096112 on the first match run, but accepted only one hour later on the second match run. 
+```{r}
+PTR %>% filter(DONOR_ID == "433119") %>% 
+  select(PTR_ID, DONOR_ID, MATCH_SUBMIT_DT, WL_ID_CODE, PTR_SEQUENCE_NUM, OFFER_ACCEPT) %>%
+  arrange(MATCH_SUBMIT_DT, PTR_SEQUENCE_NUM) %>% 
+  print_table()
+```
+
+This occurred for `r nrow(multiple_match_runs)` of our donors and resulted in `r nrow(multiple_donor_candidate_offers)` donor-candidate pairs that are double (or triple) counted. Options for treating these cases: (a) only use the latest match run, (b) only the last donor-candidate offer,  or (c) count all refusals including multiple same donor-candidate refusals?
+
+
+```{r, echo=FALSE}
+#: keep last donor-candidate offer
+# PTR4 = PTR3 %>% 
+#   group_by(DONOR_ID, WL_ID_CODE) %>% 
+#   slice_max(MATCH_SUBMIT_DT) %>% 
+#   ungroup()
+```
+
+Currently, we are using option (a) and only keeping offers from the last match run only. 
+```{r PTR4}
+#: Keep last match run from every donor
+PTR4 = PTR3 %>% 
+  group_by(DONOR_ID) %>% 
+    slice_max(MATCH_SUBMIT_DT, with_ties = TRUE) %>% 
+  ungroup()
+```
+
+This leaves a total of `r n_distinct(PTR4$DONOR_ID)` donors, `r n_distinct(PTR4$WL_ID_CODE)` candidates, and `r nrow(PTR4)` offers.
+
+## Final Population
+
+- Setting `OFFER_ACCEPT == "Y"` to *Accept* and everything else *Reject*
+
+<!--
+- Note: The `OFFER_ACCEPT = Z` is supposed to be provisional acceptance, but it seems that it is the default entry.
+    - If candidate doesn't make decision in time, it seems that *Z* is issued. 
+    - Check that `INITAL_RESPONSE_DT = FINAL_RESPONSE_TIME`
+    - The `PRIME_OPO_REFUSAL_ID` is always missing
+
+```{r, eval=FALSE, echo=FALSE}
+PTR %>% 
+  filter(OFFER_ACCEPT == "Z") %>% 
+  select(INITIAL_RESPONSE_DT, FINAL_RESPONSE_DT, PRIME_OPO_REFUSAL_ID, 
+         PTR_SEQUENCE_NUM, MAX_ACCEPT_SEQ) %>% 
+  summary
+```
+-->
+
+
+```{r PTR-final}
+PTR_final = PTR4 %>% 
+  mutate(outcome = ifelse(OFFER_ACCEPT == "Y", "Accept", "Reject"))
+```
+
+```{r}
+PTR_final
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+PTR_final %>% 
+  group_by(DONOR_ID, MATCH_ID_CODE) %>% 
+  summarize(
+    offers = n_distinct(WL_ID_CODE),
+    final_outcome = ifelse(any(outcome == "Accept"), "Accept", "Refuse"),
+    max_offer = max(PTR_SEQUENCE_NUM)
+    # final2 = ifelse(is.na(MAX_ACCEPT_SEQ), "Refuse", "Accept")
+  ) %>% ungroup() %>% 
+  # count(max_offer - offers2)
+   filter(
+     max_offer != offers
+   )
+
+PTR_final %>% count(WL_ORG)
+
+```
+
+
+```{r}
+PTR_final %>% 
+  summarize(
+    `offers` = n(),
+    `donors` = n_distinct(DONOR_ID), 
+    `waitlists` = n_distinct(WL_ID_CODE),
+    OPOs = n_distinct(OPO_CTR_CODE)
+    #`unique patients` = n_distinct(PT_CODE)
+  ) %>% print_table()
+
+PTR_final %>% count(outcome) %>% mutate(p = n/sum(n)) %>% 
+  print_table()
+
+```
+
+
+
+## Listing Center Volume and Acceptance Rate
+
+- This includes candidates that are still on the waiting list. 
+- Counts based on the specified donor/candidate sample. Candidate could have accepted heart from donors not in our sample (e.g., from adult donors). 
+
+```{r}
+PTR_final %>% 
+  group_by(WL_ID_CODE, LISTING_CTR_CODE) %>% 
+    summarize(
+      n_offers = n_distinct(DONOR_ID),
+      accept = any(outcome == "Accept")
+    ) %>% 
+  group_by(LISTING_CTR_CODE) %>% 
+    summarize(
+      n_candidates = n(), 
+      n_offers = sum(n_offers),
+      n_accepts = sum(accept),
+      offers_per_candidate = n_offers / n_candidates,
+      offer_accept_rate = n_accepts / n_offers, 
+      transplant_rate = n_accepts / n_candidates
+    ) %>% 
+  ungroup() %>% 
+  arrange(-offer_accept_rate) %>% 
+  datatable()
+```
+
+## OPO Analysis
+
+```{r}
+
+PTR_final %>% 
+  group_by(OPO_CTR_CODE) %>% 
+    summarize(
+      n_donors = n_distinct(DONOR_ID),
+      n_offers = n(),    
+      n_accepts = sum(outcome == "Accept"),
+      offer_accept_rate = n_accepts  / n_offers,
+      final_accept_rate = n_accepts / n_donors
+    ) %>% 
+  ungroup() %>% 
+  arrange(-final_accept_rate) %>% 
+  datatable()
+```
+
+OPO and Listing Center
+```{r}
+PTR_final %>% 
+  count(OPO_CTR_CODE, LISTING_CTR_CODE, sort=TRUE) %>% 
+  pivot_wider(names_from = LISTING_CTR_CODE, values_from = n,
+              values_fill=0L) %>% 
+  datatable()
+```
+
+```{r}
+PTR_final %>% 
+  filter(outcome == "Accept") %>% 
+  count(OPO_CTR_CODE, LISTING_CTR_CODE, sort=TRUE) %>% 
+  pivot_wider(names_from = LISTING_CTR_CODE, values_from = n,
+              values_fill=0L) %>% 
+  datatable()
+```
+
+# Variable Recoding Functions
+
+Functions for recoding variables that are measured for both donors and candidates.
+
+```{r recoding}
+
+#: Recoding Race/Ethnicity
+recode_race <- function(ETHCAT){
+  recode(ETHCAT, 
+          `1` = "White", 
+          `2` = "Black", 
+          `4` = "Hispanic", 
+          #`5` = "Asian", 
+          #`6` = "Amer Ind/Alaska Native", 
+          #`7` = "Native Hawaiian/other Pacific Islander",
+          #`9` = "Multiracial",
+          .default = "Other", .missing = "Unknown"
+          )  
+}
+
+#: Recoding Blood Type
+recode_ABO <- function(ABO){
+  recode(ABO, A1 = "A", A2 = "A", A1B = "AB", A2B = "AB", 
+         .missing = "Unknown")  
+}
+
+#: Recode Y = Yes, N = No, U = Unknown
+recode_YNU <- function(YNU){
+  recode(YNU, N = "No", Y = "Yes", U = "Unknown", .missing = "Unknown")
+}
+
+#: Recode P = Yes, N = No, anything else = Unknown
+recode_PNO <- function(PNO){
+  recode(PNO, N = "No", P = "Yes", .default = "Unknown", .missing = "Unknown")
+}
+# P = Positive
+# N = Negative
+# C = Cannot Disclose
+# I = Indeterminate
+# ND = Not Done
+# PD = Pending
+# U = Unknown	
+# OTHER = Unknown
+
+```
+
+# Donor Attributes
+
+- Gender `GENDER_DON`
+- Race `RACE_DON`
+- Weight (`WEIGHT_DON_KG`), Height (`HEIGHT_DON_CM`)
+- Blood type `ABO_DON`
+- Cause of Death `COD_DON`
+- Donor history of chest trauma `CHEST_TRAUMA`
+- CPR
+    a. History of CPR before and/ or after declaration of brain death (I believe that’s a category)
+    b. Duration of CPR
+    c. Cardiac arrest total downtime (variable within deceased donor data)
+- Donor Risk Factors (drug use)
+
+
+
+```{r donor_data}
+donor_data = donor_data_all %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  transmute(
+    #: Donor ID
+    DONOR_ID,
+    #: Gender {M,F}
+    GENDER_DON,   
+    #: Ethnicity
+    RACE_DON = recode_race(ETHCAT_DON),
+    #: Weight in kg
+    WEIGHT_DON_KG = WGT_KG_DON_CALC, 
+    #: Height in cm
+    HEIGHT_DON_CM = HGT_CM_DON_CALC,
+    #: Blood Type
+    ABO_DON = recode_ABO(ABO_DON),
+    #: Did donor have CPR?
+    CPR_ADMIN = recode_YNU(CPR_ADMIN),
+    #: Duration of CPR (in mins) for donors with CPR
+    CPR_DURATION = ifelse(CPR_ADMIN == "No", 0, CPR_ADMIN_DURATION),
+    #: Cardiac Arrest Downtime? (Y=Yes; N=No; U=Unknown) 
+    CARDARREST = recode_YNU(CARDARREST_DOWNTM),
+    #: Cardiac Arrest Downtime Duration (in Minutes)
+    CARDARREST_DURATION = ifelse(CARDARREST == "No", 0, CARDARREST_DOWNTM_DURATION),
+    #: Cardiac arrest after brain death:
+    CARDARREST_POSTNEURO = recode_YNU(CARDARREST_POSTNEURO_DON),
+    #: Time of Brain Death
+    BRAIN_DEATH_DT,
+    #: Donor Cause of Death
+    COD_DON,
+    #: Donor Circumstance of Death
+    DEATH_CIRCUM_DON,
+    #: Donor Mechanism of Death
+    DEATH_MECH_DON,
+    #: Donor history of Chest Trauma
+    CHEST_TRAUMA = recode_YNU(CHEST_TRAUMA),
+
+    #: Increased Risk Factors
+    HIST_COCAINE_DON = recode_YNU(HIST_COCAINE_DON), 
+    CURRENT_COCAINE_DON = recode_YNU(CONTIN_COCAINE_DON),
+    HIST_IV_DRUG_DON = recode_YNU(HIST_IV_DRUGUSE), 
+    HIST_OTHER_DRUG_DON = recode_YNU(HIST_OTH_DRUG_DON), 
+    CURRENT_OTHER_DRUG_DON = recode_YNU(CONTIN_OTH_DRUG_DON),
+    HIST_CIG_DON = recode_YNU(HIST_CIG_DON), 
+    CURRENT_CIG_DON = recode_YNU(CONTIN_CIG_DON), # Cigarette Use > 20 Pack Years Ever
+    # HIST_CAD_DON = recode_YNU(HIST_CAD), # (n=3) History of Coronary Artery Disease
+    HIST_DRUG_DON = case_when(
+      HIST_COCAINE_DON  == "Y" ~ "Y", 
+      HIST_IV_DRUGUSE   == "Y" ~ "Y",
+      HIST_OTH_DRUG_DON == "Y" ~ "Y",
+      (HIST_COCAINE_DON == "N" & HIST_IV_DRUGUSE == "N" & 
+         HIST_OTH_DRUG_DON =="N") ~ "N",
+      .default = "U"
+    ) %>% recode_YNU(), 
+    CURRENT_DRUG_DON = case_when(
+      CONTIN_COCAINE_DON  == "Y" ~ "Y", 
+      CONTIN_OTH_DRUG_DON == "Y" ~ "Y",
+      (CONTIN_COCAINE_DON == "N" & CONTIN_OTH_DRUG_DON == "N") ~ "N",
+      .default = "U"
+    ) %>% recode_YNU(), 
+    
+    #: Infectious Disease
+    RISK_CDC_DON = recode_YNU(CDC_RISK_HIV_DON), # Per PHS, Does the Donor Have Risk Factors for Blood-Borne Disease Transmission?
+    HBV_CORE_DON = recode_PNO(HBV_CORE_DON), # Hep B Core
+    HBV_NAT_DON = recode_PNO(HBV_DNA),       # Hep B NAT
+    HBV_SUR_ANTIGEN_DON = recode_PNO(HBV_SUR_ANTIGEN_DON), # Hep B Surface Antigen
+    HBV_Ab_DON = recode_PNO(HBSAB_DON),      # Hep B Antibodies    
+    HCV_NAT_DON = recode_PNO(HCV_NAT),       # Hep C NAT
+    HCV_Ab_DON = recode_PNO(HEP_C_ANTI_DON), # Hep C Antibodies
+    CMV_DON = recode_PNO(CMV_DON),           # Cytomegalovirus (CMV) antibody 
+    # TOXO_IGG_DON
+    # EBV_IGG_CAD_DON
+    # EBV_IGM_CAD_DON
+    # HTLV_DON,
+    # HTLV_NAT 
+    #: HIV (Note: only 4 total positives in all donor data)
+    # HIV_ANTIGEN_DON = recode_PNO(HIV_ANTIGEN) # HIV Ag/Ab Combo Assay
+    # HIV_SER_DON = recode_PNO(HIV_DON)         # HIV Serology Results
+    # HIV_NAT_DON = recode_PNO(HIV_NAT_DON)     # HIV NAT
+
+)
+```
+
+
+```{r}
+donor_data %>% mutate_if(is.character, factor) %>% 
+  skimr::skim()
+```
+
+
+```{r donor_data-check, echo=FALSE}
+if(n_distinct(donor_data$DONOR_ID) != nrow(donor_data)){
+  stop("donor_data contained duplicate entries. Need to fix!")
+}
+```
+
+
+
+## Donor Cause of Death 
+
+- See the file `COD-text.csv` for what we code all free text descriptions
+
+```{r donor-COD}
+donor_data %>% count(COD_DON) %>% print_table()
+```
+
+```{r}
+## Check COD classification
+donor_data_all %>%
+  semi_join(PTR_final, by="DONOR_ID") %>%
+  filter(!is.na(COD_OSTXT_DON)) %>%
+  count(COD_OSTXT_DON, COD_DON, sort=TRUE) %>% 
+  print_table() %>% scroll_box(height = "400px")
+```
+
+ 
+
+# DonorNet Measurements
+
+## VIS and Thyroid Repletion Therapy (T4)
+
+- `hrs_from_DBD` is hours since declaration of brain death
+- `VIS` is Vasoactive-Inotropic Score
+- `Thyroid` {0, 1} for patient receiving Thyroid (Levothyroxine, T4, T3) (Thyroid Repletion Therapy)
+- `Dobutamine` {0, 1} for patient receiving Dobutamine
+- `Dopamine` {0, 1} for patient receiving Dopamine
+- `Epinephrine` {0, 1} for patient receiving Epinephrine
+- `Milrinone` {0, 1} for patient receiving Milrinone
+- `Norepinephrine` {0, 1} for patient receiving Norepinephrine
+- `Vasopressin` {0, 1} for patient receiving Vasopressin
+- `INO_count` number of simultaneous inotropes being administered to donor
+
+- Note: Missing VIS replaced with 0. 
+
+```{r Inotropes}
+INOTROPES = read_rds(file.path(dir_data, "INOTROPES.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  add_donor_info() %>% 
+  transmute(
+    DONOR_ID, DT, hrs_from_DBD,
+    VIS, 
+    Thyroid, 
+    Dobutamine  = 1L*(Dobutamine > 0),
+    Dopamine    = 1L*(Dopamine > 0),
+    Epinephrine = 1L*(Epinephrine > 0),
+    Milrinone   = 1L*(Milrinone > 0),
+    Norepinephrine = 1L*(Norepinephrine > 0),
+    Vasopressin = 1L*(Vasopressin > 0),
+    INO_count = 0 + (Dobutamine > 0) + (Dopamine > 0) + (Epinephrine > 0) + 
+      (Milrinone > 0) + (Norepinephrine > 0) + (Vasopressin > 0)
+  )
+
+```
+
+
+```{r}
+INOTROPES
+```
+
+
+```{r}
+INOTROPES %>% count(DONOR_ID) %>% 
+  complete(DONOR_ID = unique(PTR_final$DONOR_ID), fill = list(n = 0L)) %>% 
+  ggplot(aes(n)) + geom_histogram(boundary = 0, binwidth=5) + 
+  # scale_y_log10() + 
+  labs(x = "number of inotrope measurements per donor")
+```
+
+## Pulse
+
+- Using age-adjusted thresholds specified below. `r note('Unsure of source.')`
+
+```{r pulse-ranges}
+#: Set pulse thresholds by age
+pulse_range = tribble(
+~ age_group,  ~age_cut, ~thres,
+'< 1',    0, 160,
+'1-2',    2, 150,
+'3-5',    5, 120, 
+'6-11',  11, 110,
+'12+',  Inf, 100
+)
+
+pulse_range %>% 
+  select(`Age Group` = age_group, threshold=thres) %>%  
+  print_table()
+```
+
+- Using `AVG_PULSE_RANGE_{START, END}` as pulse measurement
+- `PULSE_MIN`, `PULSE_MAX` Minimum and Maximum pulse
+- `PULSE_high` 1 if pulse exceeds age-adjusted threshold, 0 otherwise
+- `hrs_from_DBD` is hours since declaration of brain death
+
+```{r PULSE_donor}
+PULSE = read_rds(file.path(dir_data, "PULSE.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  add_donor_info(age=TRUE) %>% 
+  mutate(age_group = cut(floor(AGE_DON), 
+                         breaks = c(-Inf, pulse_range$age_cut),
+                         labels = pulse_range$age_group,  
+                         right = TRUE)) %>% 
+  left_join(pulse_range, by="age_group") %>% 
+  select(-age_group, -age_cut) %>% 
+  mutate(PULSE_high = 1L*(PULSE_MAX >= thres))
+```
+
+```{r}
+PULSE
+```
+
+## Central Venous Pressure (CVP)
+
+- Data from: `CVP_INT_RANGE_{START, END}`
+- `CVP_MIN`, `CVP_MAX`
+- `hrs_from_DBD` is hours since declaration of brain death
+
+```{r CVP_donor}
+CVP = read_rds(file.path(dir_data, "CVP.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  add_donor_info()
+```
+
+```{r}
+CVP
+```
+
+## Blood Pressure
+
+- Original Request: Proportion of time systolic blood pressure is greater than 2 S.D. greater than the upper limits of normal
+
+- But we don't have S.D., so using percentiles to determine low blood pressure (< 5th percentile) and high blood pressure (> 95th percentile)
+
+- We are using Average Systolic Blood Pressure: The average BP over some time period.
+
+- `r note('I don\'t have the SD units, so using time above the ranges specified in the variable_ranges spreadsheet: see below')`
+
+
+- Reference for thresholds:
+    - Electronic Supplementary Material
+    - Risk Factors and Inpatient Outcomes Associated with Acute Kidney Injury at Pediatric Severe Sepsis Presentation 
+    - Julie C. Fitzgerald, MD, PhD1,2; Michelle E. Ross, PhD3; Neal J. Thomas, MD, MSc4; Scott L. Weiss, MD MSCE1, Fran Balamuth, MD, PhD, MSCE5,6, and Amanda Hyre Anderson, PhD3
+    - Using the 95th percentile as high threshold and 5th percentile as low percentile
+    - Source: <https://sites.google.com/a/channing.harvard.edu/bernardrosner/pediatric-blood-press/boys-percentiles-of-blood-perssure-by-percentile-of-height>
+    
+    
+```{r, eval=FALSE, echo=FALSE}
+# url = "https://sites.google.com/a/channing.harvard.edu/bernardrosner/pediatric-blood-press/boys-percentiles-of-blood-perssure-by-percentile-of-height/1-year-old-1"
+# library(rvest)
+# x = read_html(url)
+# x %>% html_element("body > table") #?? not working. iframe?
+```
+    
+
+```{r bp-ranges}
+#: Set blood pressure thresholds by age and gender
+
+library(readxl)
+bp_range = bind_rows(
+  "F" = read_excel(file.path(dir_data, "ranges/Systolic_BP.xls"), 
+                   sheet = "girls"),
+  "M" = read_excel(file.path(dir_data, "ranges/Systolic_BP.xls"), 
+                   sheet = "boys"), 
+  .id = "Gender"
+) %>% 
+  select(GENDER_DON = "Gender", AGE_DON = "Age", low = "5th", high = "95th") %>%
+  # add Age = 0 and Age = 18
+  bind_rows(
+    filter(., AGE_DON == 1) %>% mutate(AGE_DON = 0),
+    filter(., AGE_DON == 17) %>% mutate(AGE_DON = 18)
+  ) %>% 
+  arrange(GENDER_DON, AGE_DON)
+```
+
+```{r}
+bp_range %>% print_table() %>%
+  scroll_box(height = "400px")
+```
+
+
+- Using `AVG_BP_SYST` as measurement
+- `BP_high` is 1 if measurement exceeds threshold
+- `BP_low` is 1 if measurement is too low
+- `hrs_from_DBD` is hours since declaration of brain death
+
+```{r BP_donor}
+
+BP = read_rds(file.path(dir_data, "BP.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  add_donor_info(donor_data_all, gender=TRUE, age=TRUE) %>% 
+  mutate(AGE_DON = floor(AGE_DON)) %>% # ranges use integers
+  left_join(bp_range, by=c("AGE_DON", "GENDER_DON")) %>% 
+  mutate(
+    BP_high = 1L*(AVG_BP_SYST > high),
+    BP_low  = 1L*(AVG_BP_SYST < low)
+  ) 
+```
+
+```{r}
+BP
+```
+
+
+```{r}
+BP %>% 
+  summarize(
+    n_missing = sum(is.na(AVG_BP_SYST)),
+    percent_high = mean(BP_high, na.rm=TRUE),
+    percent_low = mean(BP_low, na.rm=TRUE)
+  )
+```
+Not sure if this has something to do with donor management, but about 5% of BP are at the low threshold (5th percentile), but 37% exceed the high threshold (95th percentile). This indicates that donors are kept at a higher blood pressure than general pediatric population.
+
+
+
+
+## Labs
+
+
+- Labs 
+    a. Hgb (Hemogoblin) \[CBC\]
+    b. Hct (Hematocrit) \[CBC\]
+    c. Lowest eGFR (Estimated Glomerular Filtration Rate) \[LABS\]
+    d. Highest PELD or MELX-XI score \[LABS\]
+    e. Lowest pH \[ABGS:ABG_PH\]
+    f. Lowest paO2 (Partial Pressure of Oxygen) \[ABGS\]
+    g. PEEP \[ABGS\]
+    h. Highest Creatinine \[LABS\]
+    i. Peak and final Troponin I value (it is typically elevated after CPR)
+
+- TODO: Check records for incorrect dates
+
+```{r LABS_donor}
+LABS = read_rds(file.path(dir_data, "LABS.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  add_donor_info()
+ABGS = read_rds(file.path(dir_data, "ABGS.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  add_donor_info()
+CBC = read_rds(file.path(dir_data, "CBC.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  add_donor_info()
+
+LAB_data = bind_rows(LABS, ABGS, CBC)
+```
+
+```{r}
+LAB_data
+```
+
+
+```{r}
+#!!! BAD RECORDS
+LAB_data %>% 
+  filter(DT <= "1999-01-01") %>% 
+  distinct(DONOR_ID, DT) %>% print_table()
+```
+
+
+
+
+
+# ECHOS
+
+
+## Donor Echos (ECHO) 
+
+```{r load-echo-data}
+echo = read_rds(file.path(dir_data, "echo.rds")) %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  select(-DON_ID)
+```
+
+```{r}
+echo
+```
+
+
+
+
+### Quality Checks
+
+- Note: some records were opened, but there was no echo data. 
+
+```{r}
+echo_missing = PTR_final %>% 
+  anti_join(echo, by="DONOR_ID") %>% 
+  summarize(
+    n_donors = n_distinct(DONOR_ID), 
+    p_donors = n_donors / n_distinct(PTR_final$DONOR_ID),
+    n_offers = length(DONOR_ID), 
+    p_offers = n_offers / nrow(PTR_final),
+    n_candidates = n_distinct(WL_ID_CODE)
+  )
+
+#: missing dates
+echo_missing_dates = echo %>% 
+  semi_join(PTR_final, by="DONOR_ID") %>% 
+  summarize(missing_dates = sum(is.na(DT)))
+```
+
+
+- There are `r pull(echo_missing_dates)` echos for our donor population that are missing dates/times. 
+    - Note: these all correspond to records that should have been deleted. Safe to ignore.  
+
+- There are `r echo_missing$n_donors` (`r round(100*echo_missing$p_donors)`%) *donors with no ECHOs*. 
+
+
+- There are `r echo_missing$n_offers` (`r round(100*echo_missing$p_offers)`%) *offers with no ECHOs*. 
+
+
+
+
+### Classify ECHO
+```{r echo_data}
+#: classify echos as normal or abnormal
+echo_data = echo %>% 
+  filter(!is.na(DONOR_ID), !is.na(DT)) %>% 
+  arrange(DONOR_ID, DT) %>% 
+  #: extract integer codes
+  mutate(
+    across(
+      c(mitral_insuff, aortic_insuff, tricuspid_insuff, pulmonary_insuff, 
+        global_left_vent_dysf, global_right_vent_dysf, 
+        focal_leftvent_free_wall_dysf, focal_intervent_septal_dysf), 
+      ~ str_extract(., "\\d") %>% as.integer
+    )) %>% 
+  #: LVSWMA  
+  mutate(
+    LVSWMA = case_when(
+      focal_leftvent_free_wall_dysf > 0 ~ 1L, 
+      focal_intervent_septal_dysf   > 0 ~ 1L, 
+      TRUE ~ 0L  # both are 0 or missing (or one is 0, other is missing)
+  )) %>% 
+  #: Objective Measurements
+  mutate(
+    ECHO_OBJECTIVE = case_when(
+      # first check biplane_eject_frac
+      biplane_eject_frac >= 55 ~ 0L, 
+      biplane_eject_frac <  55 ~ 1L, 
+      # else biplane_eject_frac is missing
+      four_chamber_eject_frac >= 55 ~ 0L, 
+      four_chamber_eject_frac <  55 ~ 1L, 
+      # else biplane_eject_frac & four_chamber_eject_frac are missing
+      shortening_frac >= 28 ~ 0L,
+      shortening_frac <  28 ~ 1L,
+      # if all are missing, then leave as NA
+    )
+  ) %>% 
+  #: Objective Scale Measurements
+  mutate(
+    ECHO_OBJECTIVE_SCALE = case_when(
+      # first check biplane_eject_frac
+      biplane_eject_frac >= 55                  ~ 0L, # [55, 100]
+      between(biplane_eject_frac, 45, 55)       ~ 1L, # [45, 55)
+      between(biplane_eject_frac, 35, 45)       ~ 2L, # [35, 45)
+      biplane_eject_frac < 35                   ~ 3L, # [0, 35)
+      # else biplane_eject_frac is missing
+      four_chamber_eject_frac >= 55             ~ 0L, # [55, 100]
+      between(four_chamber_eject_frac, 45, 55)  ~ 1L, # [45, 55)
+      between(four_chamber_eject_frac, 35, 45)  ~ 2L, # [35, 45)
+      four_chamber_eject_frac < 35              ~ 3L, # [0, 35)  
+      # else biplane_eject_frac & four_chamber_eject_frac are missing
+      shortening_frac >= 28             ~ 0L, # [28, 100]
+      between(shortening_frac, 23, 28)  ~ 1L, # [23, 28)
+      between(shortening_frac, 18, 23)  ~ 2L, # [18, 23)
+      shortening_frac < 18              ~ 3L, # [0, 18)        
+      # if all are missing, then leave as NA
+    )
+  ) %>% 
+  #: VALVE_FXN
+  mutate( 
+    VALVE_FXN = case_when(
+      aortic_insuff >= 2    ~ 1L,
+      mitral_insuff >= 2    ~ 1L,
+      tricuspid_insuff >= 2 ~ 1L,
+      pulmonary_insuff >= 2 ~ 1L,
+      TRUE ~ 0L)   # anything else, including all missing (NA)
+  ) %>%  
+  #: Qualitative Echo
+  mutate(
+    ECHO_QUAL = case_when(
+      global_left_vent_dysf == 0 & qual_eject_frac <  55 ~ 0L, 
+      global_left_vent_dysf == 1 & qual_eject_frac >= 55 ~ 0L, 
+      global_left_vent_dysf >  0 ~ 1L,
+      qual_eject_frac < 55 ~ 1L, 
+      is.na(qual_eject_frac) & is.na(global_left_vent_dysf) ~ NA_integer_,
+      TRUE ~ 0L
+    )
+  ) %>% 
+  mutate(ABNL_ECHO_CUM = case_when(
+    # if any are bad, then bad
+    ECHO_OBJECTIVE == 1         ~ 1L,
+    ECHO_QUAL == 1              ~ 1L,
+    LVSWMA == 1                 ~ 1L,
+    VALVE_FXN == 1              ~ 1L,
+    global_left_vent_dysf > 0   ~ 1L, 
+    global_right_vent_dysf > 0  ~ 1L, 
+    # if all missing, then NA
+    is.na(ECHO_OBJECTIVE) & is.na(ECHO_QUAL) & 
+      is.na(LVSWMA) & is.na(VALVE_FXN) &
+      is.na(global_left_vent_dysf) & is.na(global_right_vent_dysf) ~ NA_integer_, 
+    # otherwise, its good
+    TRUE ~ 0L)
+  ) %>% 
+  select(DONOR_ID, DT, LVSWMA, ECHO_OBJECTIVE, ECHO_OBJECTIVE_SCALE, 
+         VALVE_FXN, ECHO_QUAL, ABNL_ECHO_CUM) %>% 
+  add_donor_info()
+```
+
+```{r}
+echo_data
+```
+
+
+
+```{r}
+echo_data %>% 
+  select(-DONOR_ID, -DT) %>% 
+  skimr::skim()
+```
+Number of Echos per donor
+```{r}
+echo_data %>% 
+  count(DONOR_ID) %>% 
+  complete(
+    DONOR_ID = unique(PTR_final$DONOR_ID),
+    fill = list(n = 0L)       
+  ) %>% 
+  count("echos_per_donor" = n, name="n") %>% mutate(p=n/sum(n)) %>% 
+  print_table()
+```
+
+# Data for analysis
+
+- Keep measurements after declaration of brain death (`hrs_from_DBD` > 0)
+
+```{r}
+save_it <- function(x, nm){
+  nm = file.path(dir_save, nm)
+  write_csv(x, nm)
+}
+```
+
+
+```{r}
+thoracic %>% 
+  transmute(
+    WL_ID_CODE,
+    WEIGHT_CAND_KG = coalesce(WGT_KG_CALC, WGT_KG_TCR), 
+    HEIGHT_CAND_CM = coalesce(HGT_CM_CALC, HGT_CM_TCR),
+  ) %>% 
+  save_it("candidate_data.csv")
+```
+
+
+```{r}
+
+PTR_all %>% save_it("PTR_all.csv")
+
+#: PTR data
+PTR_final %>% 
+  transmute(PTR_ID,
+    # donor info
+    DONOR_ID, AGE_DON, OPO_CTR_CODE, 
+    # candidate info
+    WL_ID_CODE, AGE_PT, LISTING_CTR_CODE, STATUS_CAND, 
+    # refusal codes
+    REFUSAL_CD = PRIME_OPO_REFUSAL_ID %>% coalesce(TXC_REFUSAL_CD) %>% 
+      coalesce(INITIAL_REFUSAL_CD),
+    REFUSAL_CD = ifelse(outcome == "Accept", NA, REFUSAL_CD),
+    # accept/reject outcome
+    outcome, MAX_ACCEPT_SEQ,
+    # offer info
+    DISTANCE, MATCH_ID_CODE, MATCH_SUBMIT_DT, PTR_SEQUENCE_NUM,
+  ) %>% 
+  save_it("PTR_final.csv")
+
+
+#: donor_data
+donor_data %>% save_it("donor_data.csv")
+  
+#: inotropes
+INOTROPES %>% 
+  filter(hrs_from_DBD > 0) %>% 
+  group_by(DONOR_ID) %>% 
+    summarize(
+      n = n(),
+      VIS_peak = max(VIS),
+      INO_count_max = max(INO_count),
+      Thyroid_ever = max(Thyroid)
+    ) %>% 
+  save_it("Inotropes.csv")
+  
+#: blood-pressure
+BP %>% 
+  filter(hrs_from_DBD > 0) %>% 
+  group_by(DONOR_ID) %>% 
+    summarize(
+      n = n(),
+      BP_high_prop = mean(BP_high),
+      BP_low_prop = mean(BP_low)
+    ) %>% 
+  save_it("blood-pressure.csv")
+
+#: troponin
+LAB_data %>% 
+  filter(hrs_from_DBD > 0, variable == "TROPONINI") %>% 
+  group_by(DONOR_ID) %>%
+    summarize(
+      n = n(),
+      TROPONIN_peak = max(value), 
+      TROPONIN_avg = mean(value),
+      TROPONIN_med = median(value)
+    ) %>% 
+  save_it("troponin.csv")
+
+
+#: GFR
+LAB_data %>% 
+  filter(hrs_from_DBD > 0, variable == "GFR") %>% 
+  group_by(DONOR_ID) %>%
+    summarize(
+      n = n(),
+      GFR_min = min(value), 
+      GFR_avg = mean(value),
+      GFR_med = median(value)
+    ) %>%
+  save_it("gfr.csv")
+
+#: echo
+echo_data %>% 
+  filter(hrs_from_DBD > 0) %>% 
+  group_by(DONOR_ID) %>%
+    arrange(DT) %>% 
+    summarize(
+      n = n(),
+      echo_final_abnormal = tail(ABNL_ECHO_CUM > 0, n=1),
+      echo_any_abnormal = any(ABNL_ECHO_CUM > 0),
+      echo_any_normal = any(ABNL_ECHO_CUM < 1),
+      echo_improves = any(lead(ABNL_ECHO_CUM) > ABNL_ECHO_CUM, na.rm=TRUE),
+      echo_worsens = any(lead(ABNL_ECHO_CUM) < ABNL_ECHO_CUM, na.rm=TRUE),
+    ) %>% 
+  save_it("echo.csv")
+```
+
+
+```{r}
+#: listing center acceptance rates
+PTR_final %>% 
+  group_by(WL_ID_CODE, LISTING_CTR_CODE) %>% 
+    summarize(
+      n_offers = n_distinct(DONOR_ID),
+      accept = any(outcome == "Accept")
+    ) %>% 
+  group_by(LISTING_CTR_CODE) %>% 
+    summarize(
+      n_candidates = n(), 
+      n_offers = sum(n_offers),
+      n_accepts = sum(accept),
+      offers_per_candidate = n_offers / n_candidates,
+      offer_accept_rate = n_accepts / n_offers, 
+      transplant_rate = n_accepts / n_candidates
+    ) %>% 
+  save_it("listing-center.csv")
+
+
+#: OPO center acceptance rates
+PTR_final %>% 
+  group_by(OPO_CTR_CODE) %>% 
+  summarize(
+    n_donors = n_distinct(DONOR_ID),
+    n_offers = n(),    
+    n_accepts = sum(outcome == "Accept"),
+    offer_accept_rate = n_accepts  / n_offers,
+    final_accept_rate = n_accepts / n_donors
+  )  %>% 
+  save_it("opo.csv")
+  
+
+#: OPO x Listing center 
+PTR_final %>% 
+  group_by(OPO_CTR_CODE, LISTING_CTR_CODE) %>% 
+    summarize(
+      n_offers = n(), 
+      n_accepts = sum(outcome == "Accept")
+    ) %>% 
+  save_it("opo-listing.csv")
+
+```
+
+
+
