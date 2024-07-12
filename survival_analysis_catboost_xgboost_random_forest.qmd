@@ -1,5 +1,5 @@
 ---
-title: "Survival Analysis - Final Binary Classification Model"
+title: "Survival Analysis: CatBoost vs XGBoost vs RandomForest"
 author: "R. Jerome Dixon"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 format:
