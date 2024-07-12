@@ -13,7 +13,7 @@
 
 catboost_info/*
 data/*
-model/*
+models/*
 html/*
 
 
