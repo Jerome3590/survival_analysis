@@ -62,9 +62,25 @@ survival_model %>%
 
 ```{r}
 
+survival_model %<>% 
+  select(-median_refusals_old,-LISTING_CTR_CODE, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -starts_with("median_wait_days"))
+
+```
+
+
+```{r}
+
 survival_model_test <- read_rds(here("data","model_data_test.rds"))
 
 ```
+
+```{r}
+
+survival_model_test %<>% 
+  select(-median_refusals_old, -LISTING_CTR_CODE, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -starts_with("median_wait_days"))
+
+```
+
 
 ```{r}
 
@@ -168,19 +184,19 @@ X_test[categorical_columns] = X_test[categorical_columns].fillna('missing')
 ```{python}
 
 # NaN values in the column at index 15
-has_nan = X_train.iloc[:, 15].isna().any()
-print("Column at index 15 contains NaN values:", has_nan)
+has_nan = X_train.iloc[:, 14].isna().any()
+print("Column at index 14 contains NaN values:", has_nan)
 
 ```
 
 
 ```{python}
 
-if 'Missing' not in X_train.iloc[:, 15].cat.categories:
-    X_train.iloc[:, 15] = X_train.iloc[:, 15].cat.add_categories(['Missing'])
+if 'Missing' not in X_train.iloc[:, 14].cat.categories:
+    X_train.iloc[:, 14] = X_train.iloc[:, 14].cat.add_categories(['Missing'])
 
 # Replace NaN values in the column at index 15 with "Missing"
-X_train.iloc[:, 15] = X_train.iloc[:, 15].fillna('Missing')
+X_train.iloc[:, 14] = X_train.iloc[:, 14].fillna('Missing')
 
 ```
 
@@ -224,7 +240,7 @@ def objective(trial):
     return np.max(cv_results['test-AUC-mean'])
 
 study = optuna.create_study(direction="maximize")
-study.optimize(objective, n_trials=125, timeout=6000)
+study.optimize(objective, n_trials=25, timeout=6000)
 
 print("Number of finished trials: {}".format(len(study.trials)))
 print("Best trial:")
@@ -238,11 +254,11 @@ for key, value in study.best_trial.params.items():
 ```{python optuna-params1}
 
 model_params = {
-    'learning_rate': 0.15,
-    'depth': 3,
-    'colsample_bylevel': 0.78,
-    'min_data_in_leaf': 56,
-    'l2_leaf_reg': 8.31
+    'learning_rate': 0.11,
+    'depth': 2,
+    'colsample_bylevel': 0.16,
+    'min_data_in_leaf': 85,
+    'l2_leaf_reg': 4.43
 }
     
 ```
@@ -294,8 +310,37 @@ loss = model_auc.get_feature_importance(test_pool, type='LossFunctionChange', pr
 
 ```
 
-```{r catboost-feature-importance}
+```{r catboost-gain-feature-importance}
 
+gain_tbl <- py$gain
+
+table1 <- tibble( 'Feature ID' = gain_tbl$`Feature Id`,
+                  'Importance' = gain_tbl$Importances) %>% 
+  rowid_to_column(var = "Rank") %>% 
+  as_hux() %>%
+  theme_article() %>% 
+  set_align(col=c('Rank','Importance'), value= "center") %>% 
+  set_tb_padding(2)
+
+```
+
+
+```{r catboost-loss-feature-importance}
+
+loss_tbl <- py$loss
+
+table2 <- tibble( 'Feature ID' = loss_tbl$`Feature Id`,
+                  'Importance' = loss_tbl$Importances) %>% 
+  rowid_to_column(var = "Rank") %>% 
+  as_hux() %>%
+  theme_article() %>% 
+  set_align(col=c('Rank','Importance'), value= "center") %>% 
+  set_tb_padding(2)
+
+```
+
+
+```{r catboost-feature-importance}
 #| echo: true
 #| layout-ncol: 1
 #| label: tbl-feature-importance-native
@@ -307,39 +352,18 @@ loss = model_auc.get_feature_importance(test_pool, type='LossFunctionChange', pr
 #| message: false
 #| eval: true
 
-gain_tbl <- py$gain
-loss_tbl <- py$loss
-
-table1 <- tibble( 'Feature ID' = gain_tbl$`Feature Id`,
-                  'Importance' = gain_tbl$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
-
-
-table2 <- tibble( 'Feature ID' = loss_tbl$`Feature Id`,
-                  'Importance' = loss_tbl$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
-
 
 table1
 table2
 
 ```
 
-### Filtered Model
+### Filtered Model with One Hot Encoding
 
 ```{python}
 
 import pandas as pd
 
-# Assuming `gain` and `loss` are pandas DataFrames with 'Feature' and 'Importance' columns
 # Filter the features with importance greater than zero
 gain_filtered = gain[gain['Importances'] > 0]
 loss_filtered = loss[loss['Importances'] > 0]
@@ -360,7 +384,6 @@ common_features_df
 
 import numpy as np
 
-# Assuming `common_features_df` contains the common features
 common_features = common_features_df['Feature'].tolist()
 
 # Filter the train and test datasets to include only the common features
@@ -377,56 +400,6 @@ Y_test = np.array(y_test)
 cat_index = get_categorical_indexes(X_train_filtered)
 
 ```
-
-
-```{python}
-
-import pandas as pd
-
-# Convert NaN values to a string in categorical columns
-categorical_columns_filtered = [col for col in X_train_filtered.columns if X_train_filtered[col].dtype == 'object']
-X_train_filtered[categorical_columns_filtered] = X_train_filtered[categorical_columns_filtered].fillna('missing')
-
-
-# Convert NaN values to a string in categorical columns
-categorical_columns_filtered = [col for col in X_test_filtered.columns if X_test_filtered[col].dtype == 'object']
-X_test_filtered[categorical_columns_filtered] = X_test_filtered[categorical_columns_filtered].fillna('missing')
-
-```
-
-- Data Cleansing for Missing Values
-
-```{python}
-
-# NaN values in the column at index 15
-has_nan = X_train_filtered.iloc[:, 15].isna().any()
-print("Column at index 15 contains NaN values:", has_nan)
-
-```
-
-
-```{python}
-
-import pandas as pd
-
-columns_to_convert = [15]  
-
-for index in columns_to_convert:
-    # Convert for training data
-    if isinstance(index, int):
-        column_name = X_train_filtered.columns[index]
-    else:
-        column_name = index
-
-    X_train_filtered[column_name] = pd.to_numeric(X_train_filtered[column_name].replace('Missing', pd.NA), errors='coerce')
-    X_test_filtered[column_name] = pd.to_numeric(X_test_filtered[column_name].replace('Missing', pd.NA), errors='coerce')
-
-# Verify conversion
-print(X_train_filtered.iloc[:, 15].head())
-print(X_test_filtered.iloc[:, 15].head())
-
-```
-
 
 #### Optuna Hyperparameter Optimization
 
@@ -468,7 +441,7 @@ def objective(trial):
     return np.max(cv_results['test-AUC-mean'])
 
 study = optuna.create_study(direction="maximize")
-study.optimize(objective, n_trials=5, timeout=6000)
+study.optimize(objective, n_trials=25, timeout=6000)
 
 print("Number of finished trials: {}".format(len(study.trials)))
 print("Best trial:")
@@ -478,147 +451,100 @@ for key, value in study.best_trial.params.items():
 
 ```
 
+```{python optuna-params2}
+
+model_params2 = {
+    'learning_rate': 0.12,
+    'depth': 9,
+    'colsample_bylevel': 0.11,
+    'min_data_in_leaf': 2,
+    'l2_leaf_reg': 8.76
+}
+    
+```
+
+```{python catboost-model-auc-filtered-feature-importance}
+
+#| eval: true
+#| echo: true
+#| message: false
+#| warning: false
+
+import numpy as np
+from sklearn.model_selection import train_test_split, StratifiedKFold
+import pandas as pd
+import optuna
+from catboost import CatBoostClassifier, Pool
+from sklearn.metrics import roc_auc_score, brier_score_loss, accuracy_score, log_loss, confusion_matrix
+
+
+cat_indexes = get_categorical_indexes(X_train_filtered)
+
+filtered_model_auc = CatBoostClassifier(iterations=1000,
+                               objective='Logloss',
+                               eval_metric="AUC",
+                               **model_params2, 
+                               boosting_type= 'Ordered',
+                               bootstrap_type='MVS',
+                               metric_period=25,
+                               early_stopping_rounds=100,
+                               use_best_model=True, 
+                               random_seed=1997)
+                               
+
+# Create a Pool object for the training and testing data
+train_pool_filtered = Pool(X_train_filtered, cat_features=cat_indexes, label=Y_train)
+test_pool_filtered = Pool(X_test_filtered, cat_features=cat_indexes, label=Y_test)
+ 
+
+filtered_model_auc.fit(train_pool_filtered, eval_set=test_pool_filtered)
+
+```
 
 
 #### Model Accuracy
 
 ```{python}
 
+from sklearn.metrics import roc_auc_score, brier_score_loss, accuracy_score, log_loss
 import pandas as pd
 
-Y_Pred = model_auc.predict(X_test)
-Y_Pred_Proba = model_auc.predict_proba(X_test)[:, 1]  # get the probabilities of the positive class
+Y_Pred_filtered = filtered_model_auc.predict(X_test_filtered)
 
+Y_Pred_Proba_Positive_filtered = filtered_model_auc.predict_proba(X_test_filtered)[:, 1]  # Probabilities of the positive class
 
-Y_Pred_Proba_Positive = model_auc.predict_proba(X_test)[:, 1]  # Probabilities of the positive class
-Y_Pred_Proba_Negative = model_auc.predict_proba(X_test)[:, 0]  # Probabilities of the negative class
+# Calculate AUC
+auc = roc_auc_score(Y_test, Y_Pred_Proba_Positive_filtered)
+# Calculate Brier Score
+brier_score = brier_score_loss(Y_test, Y_Pred_Proba_Positive_filtered)
+# Calculate Accuracy
+accuracy = accuracy_score(Y_test, Y_Pred_filtered)
+# Calculate Log Loss
+log_loss_value = log_loss(Y_test, Y_Pred_Proba_Positive_filtered)
 
-# Converting predictions and actuals into a DataFrame for better readability, including negative class probabilities
-predictions = pd.DataFrame({
-    'Prob_Negative_Class': Y_Pred_Proba_Negative,
-    'Prob_Positive_Class': Y_Pred_Proba_Positive,
-    'Predicted': Y_Pred,
-    'Actual': Y_test
+# Create a DataFrame
+catboost_filtered_by_feature_importance_df = pd.DataFrame({
+    'Model': ['CatBoostClassifier_FilteredByFeatureImportance'],
+    'AUC': [auc],
+    'Brier Score': [brier_score],
+    'Accuracy': [accuracy],
+    'Log Loss': [log_loss_value]
 })
 
-# Converting predictions and actuals into a DataFrame for better readability
-predictions = pd.DataFrame({
-    'Prob_Positive_Class': Y_Pred_Proba,
-    'Predicted': Y_Pred,
-    'Actual': Y_test
-})
+print(catboost_filtered_by_feature_importance_df)
+
 
 ```
 
-#### Uncalibrated Predictions
-
-```{r message=FALSE, warning=FALSE}
-
-library(probably)
-
-predictions <- py$predictions %>% 
-  mutate(Class = ifelse(Actual == 0, "survive", "not_survive"),
-         .pred_not_survive = Prob_Positive_Class
-         )
-
-# Define the levels you want
-factor_levels <- c("survive", "not_survive")
-
-# Set the levels of the 'actuals' column
-predictions$Class <- factor(predictions$Class, levels = rev(factor_levels))
-
-predictions %>% 
-  datatable()
-
-```
-
-#### Calibration Plot - CatBoost
-
-```{r}
-
-predictions %>% 
-  cal_plot_logistic(Class, .pred_not_survive)
-
-```
-
-#### Decision Threshold
-
-```{r message=FALSE, warning=FALSE}
-
-library(pROC)
-
-# Calculate the ROC curve
-roc_result <- roc(predictions$Actual, predictions$Prob_Positive_Class)
-
-coords <- coords(roc_result, "best", ret="threshold", best.method="closest.topleft")
-
-# Optimal threshold for maximizing true positive rate
-optimal_threshold <- coords$threshold
-
-# Apply the optimal threshold to convert probabilities to class predictions
-predictions$predicted_classes <- ifelse(predictions$Prob_Positive_Class >= optimal_threshold, 1, 0)
-
-# Output the optimal threshold
-cat("Optimal Threshold:", optimal_threshold, "\n")
-
-cat("Number of '1's predicted:", sum(predictions$predicted_classes), "\n")
-
-```
-
-#### Calibrated Model Accuracy Using Decision Threshold
-
-```{python}
-
-#| echo: true
-#| warning: false
-#| message: false
-#| eval: false
-
-from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, precision_score, recall_score, roc_curve, roc_auc_score
-
-# Calculate metrics
-f1_updated = f1_score(r.predictions["Actual"], r.predictions["predicted_classes"])
-precision_updated = precision_score(r.predictions["Actual"], r.predictions["predicted_classes"])
-recall_updated = recall_score(r.predictions["Actual"], r.predictions["predicted_classes"])
-accuracy_updated = accuracy_score(r.predictions["Actual"], r.predictions["predicted_classes"])
-
-# Calculate the area under the curve (AUC)
-model_auc_updated = roc_auc_score(r.predictions["Actual"], r.predictions["Prob_Positive_Class"])
-conf_matrix_updated = confusion_matrix(r.predictions["Actual"], r.predictions["predicted_classes"])
-
-```
-
-```{r updated-metrics-catboost-native}
-
-#| echo: true
-#| warning: false
-#| message: false
-#| eval: false
-
-model_f1_score <- py$f1_updated
-model_recall <- py$recall_updated
-model_precision <- py$precision_updated
-model_accuracy <- py$accuracy_updated
-model_roc_score <- py$model_auc_updated
-
-model_accuracy_updated <- list(
-  F1_Score = model_f1_score,
-  Recall = model_recall,
-  Precision = model_precision,
-  Accuracy = model_accuracy,
-  ROC_Score = model_roc_score
-)
-
-model_accuracy_updated
-
-```
 
 ### CatBoost One Hot Encode Model: Candidate Diagnosis Categorical Feature
 
+
 ```{r}
+
 survival_model_one_hot <- survival_model
 survival_model_one_hot_test <- survival_model_test
+
 ```
 
 ```{r}
