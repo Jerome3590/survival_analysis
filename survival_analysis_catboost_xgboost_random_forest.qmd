@@ -35,6 +35,7 @@ library(glmnet)
 library(forcats)
 library(jsonlite)
 library(quarto)
+library(plotly)
 
 (options)(scipen=999)
 
@@ -55,8 +56,7 @@ survival_model <- read_rds(here("data","model_data_train.rds"))
 survival_model %<>%
   mutate_if(is.character, as.factor) 
  
-survival_model %>% 
-  str()
+colnames(survival_model) 
 
 ```
 
@@ -67,10 +67,18 @@ survival_model %<>%
 
 ```
 
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
 
 survival_model_test <- read_rds(here("data","model_data_test.rds"))
+
+survival_model_test %<>%
+  mutate_if(is.character, as.factor) 
+ 
+colnames(survival_model_test)
 
 ```
 
@@ -81,18 +89,29 @@ survival_model_test %<>%
 
 ```
 
-
 ```{r}
 
-cat_features <- names(survival_model)[sapply(survival_model, is.factor)]
+cat_features_train <- names(survival_model)[sapply(survival_model, is.factor)]
 
-cat_features
+cat_features_train
 
 ```
 
-#### Utility Function for Categorical Indexes needed by CatBoost
+```{r}
+
+cat_features_test <- names(survival_model_test)[sapply(survival_model_test, is.factor)]
+
+cat_features_test
+
+```
+
+#### Utility Function for Categorical Indexes
 
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
 
 def get_categorical_indexes(X_train):
     # Select columns with object or categorical dtype
@@ -107,9 +126,8 @@ def get_categorical_indexes(X_train):
 
 ### Native CatBoost Model
 
-```{r} 
-
-#| echo: true
+```{r}
+#| echo: false
 #| warning: false
 #| message: false
 #| eval: true
@@ -141,10 +159,9 @@ test_Y <- survival_model_test$outcome
 
 ```
 
-
 ```{python catboost-r-data}
 
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -163,8 +180,10 @@ cat_index = get_categorical_indexes(X_train)
 
 ```
 
-
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
 import pandas as pd
 
@@ -179,9 +198,12 @@ X_test[categorical_columns] = X_test[categorical_columns].fillna('missing')
 
 ```
 
-- Data Cleansing for Missing Values
+-   Data Cleansing for Missing Values
 
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
 # NaN values in the column at index 15
 has_nan = X_train.iloc[:, 14].isna().any()
@@ -189,8 +211,10 @@ print("Column at index 14 contains NaN values:", has_nan)
 
 ```
 
-
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
 if 'Missing' not in X_train.iloc[:, 14].cat.categories:
     X_train.iloc[:, 14] = X_train.iloc[:, 14].cat.add_categories(['Missing'])
@@ -202,10 +226,10 @@ X_train.iloc[:, 14] = X_train.iloc[:, 14].fillna('Missing')
 
 #### Optuna Hyperparameter Optimization
 
-```{python optuna-hyperparameter-optimization, eval=FALSE}
+```{python optuna-native-model, eval=FALSE}
 
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -250,7 +274,6 @@ for key, value in study.best_trial.params.items():
 
 ```
 
-
 ```{python optuna-params1}
 
 model_params = {
@@ -266,7 +289,7 @@ model_params = {
 ```{python catboost-model-auc}
 
 #| eval: true
-#| echo: true
+#| echo: false
 #| message: false
 #| warning: false
 
@@ -300,6 +323,7 @@ test_pool = Pool(X_test, cat_features=cat_indexes, label=Y_test)
 model_auc.fit(train_pool, eval_set=test_pool)
 
 ```
+
 #### Model Metrics
 
 ```{python}
@@ -333,7 +357,7 @@ print(catboost_native)
 
 ```
 
-#### Feature Importances
+#### Feature Importances: Native Model
 
 ```{python}
 
@@ -342,38 +366,8 @@ loss = model_auc.get_feature_importance(test_pool, type='LossFunctionChange', pr
 
 ```
 
-```{r catboost-gain-feature-importance}
-
-gain_tbl1 <- py$gain
-
-gain_table1 <- tibble( 'Feature ID' = gain_tbl$`Feature Id`,
-                  'Importance' = gain_tbl$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
-
-```
-
-
-```{r catboost-loss-feature-importance}
-
-loss_tbl1 <- py$loss
-
-loss_table1 <- tibble( 'Feature ID' = loss_tbl$`Feature Id`,
-                  'Importance' = loss_tbl$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
-
-```
-
-
-```{r catboost-feature-importance}
-#| echo: true
+```{r catboost-native-feature-importance}
+#| echo: false
 #| layout-ncol: 1
 #| label: tbl-feature-importance-native
 #| tbl-cap: "CatBoost Feature Importance"
@@ -384,6 +378,26 @@ loss_table1 <- tibble( 'Feature ID' = loss_tbl$`Feature Id`,
 #| message: false
 #| eval: true
 
+gain_tbl1 <- py$gain
+
+gain_table1 <- tibble( 'Feature ID' = gain_tbl1$`Feature Id`,
+                  'Importance' = gain_tbl1$Importances) %>% 
+  rowid_to_column(var = "Rank") %>% 
+  as_hux() %>%
+  theme_article() %>% 
+  set_align(col=c('Rank','Importance'), value= "center") %>% 
+  set_tb_padding(2)
+
+loss_tbl1 <- py$loss
+
+loss_table1 <- tibble( 'Feature ID' = loss_tbl1$`Feature Id`,
+                  'Importance' = loss_tbl1$Importances) %>% 
+  rowid_to_column(var = "Rank") %>% 
+  as_hux() %>%
+  theme_article() %>% 
+  set_align(col=c('Rank','Importance'), value= "center") %>% 
+  set_tb_padding(2)
+
 
 gain_table1
 loss_table1
@@ -393,7 +407,6 @@ loss_table1
 ### CatBoost Filtered by Feature Importances
 
 Here we filter for features both common in Gain Feature Importances and Loss Value Function Change Feature Importances.
-
 
 ```{python}
 
@@ -413,9 +426,10 @@ common_features_df
 
 ```
 
-
-
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
 import numpy as np
 
@@ -438,10 +452,10 @@ cat_index = get_categorical_indexes(X_train_filtered)
 
 #### Optuna Hyperparameter Optimization
 
-```{python optuna-hyperparameter-optimization, eval=FALSE}
+```{python optuna-feature-importance-model, eval=FALSE}
 
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -498,10 +512,10 @@ model_params2 = {
     
 ```
 
-```{python catboost-model-auc-filtered-by-feature-importance}
+```{python catboost-filtered-by-feature-importance}
 
 #| eval: true
-#| echo: true
+#| echo: false
 #| message: false
 #| warning: false
 
@@ -550,13 +564,16 @@ feature_importance_model.save_model("models/feature_importance",
 #### Model Metrics
 
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
 from sklearn.metrics import roc_auc_score, brier_score_loss, accuracy_score, log_loss
 import pandas as pd
 
-Y_Pred_filtered = filtered_model_auc.predict(X_test_filtered)
+Y_Pred_filtered = feature_importance_model.predict(X_test_filtered)
 
-Y_Pred_Proba_Positive_filtered = filtered_model_auc.predict_proba(X_test_filtered)[:, 1]  # Probabilities of the positive class
+Y_Pred_Proba_Positive_filtered = feature_importance_model.predict_proba(X_test_filtered)[:, 1]  # Probabilities of the positive class
 
 # Calculate AUC
 auc = roc_auc_score(Y_test, Y_Pred_Proba_Positive_filtered)
@@ -568,29 +585,42 @@ accuracy = accuracy_score(Y_test, Y_Pred_filtered)
 log_loss_value = log_loss(Y_test, Y_Pred_Proba_Positive_filtered)
 
 # Create a DataFrame
-filtered_by_feature_importance = pd.DataFrame({
-    'Model': ['FilteredByFeatureImportance'],
+feature_importance_model_df = pd.DataFrame({
+    'Model': ['CB_FeatureImportance'],
     'AUC': [auc],
     'Brier Score': [brier_score],
     'Accuracy': [accuracy],
     'Log Loss': [log_loss_value]
 })
 
-print(filtered_by_feature_importance)
+print(feature_importance_model_df)
 
 
 ```
 
-#### Feature Importances
+#### Feature Importances Updated
 
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
-gain2 = filtered_model_auc.get_feature_importance(prettified=True)
-loss2 = filtered_model_auc.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
+gain2 = feature_importance_model.get_feature_importance(prettified=True)
+loss2 = feature_importance_model.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
 
 ```
 
 ```{r catboost-gain-feature-importance}
+#| echo: true
+#| layout-ncol: 1
+#| label: tbl-feature-importance-feature-importance
+#| tbl-cap: "CatBoost Feature Importance"
+#| tbl-subcap: 
+#|   - "Gain"
+#|   - "Loss Function Change"
+#| warning: false
+#| message: false
+#| eval: true
 
 gain_tbl2 <- py$gain2
 
@@ -602,10 +632,6 @@ gain_table2 <- tibble( 'Feature ID' = gain_tbl2$`Feature Id`,
   set_align(col=c('Rank','Importance'), value= "center") %>% 
   set_tb_padding(2)
 
-```
-
-
-```{r catboost-loss-feature-importance}
 
 loss_tbl2 <- py$loss2
 
@@ -617,31 +643,17 @@ loss_table2 <- tibble( 'Feature ID' = loss_tbl2$`Feature Id`,
   set_align(col=c('Rank','Importance'), value= "center") %>% 
   set_tb_padding(2)
 
-```
-
-
-```{r catboost-feature-importance}
-#| echo: true
-#| layout-ncol: 1
-#| label: tbl-feature-importance-native
-#| tbl-cap: "CatBoost Feature Importance"
-#| tbl-subcap: 
-#|   - "Gain"
-#|   - "Loss Function Change"
-#| warning: false
-#| message: false
-#| eval: true
-
-
 gain_table2
 loss_table2
 
 ```
 
-
-### CatBoost with One Hot Encode: Candidate Diagnosis Categorical Feature
+### CatBoost with One Hot Encode: Candidate Diagnosis
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # converting python objects to R objects to use existing one hot encoding workflow
 X_train_filtered_ohe <- py$X_train_filtered
@@ -659,8 +671,10 @@ cat_features_ohe
 
 ```
 
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # Create the dummy variables specification
 dummies <- dummyVars(~ CAND_DIAG, data = X_train_filtered_ohe[, cat_features_ohe], fullRank = FALSE)
@@ -672,11 +686,14 @@ df_dummies <- predict(dummies, newdata = X_train_filtered_ohe)
 X_train_filtered_ohe <- cbind(X_train_filtered_ohe[, !(names(X_train_filtered_ohe) %in% c('CAND_DIAG'))], df_dummies)
 
 # Review the structure of the updated dataframe
-str(X_train_filtered_ohe)
+colnames(X_train_filtered_ohe)
 
 ```
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # Create the dummy variables specification
 dummies <- dummyVars(~ CAND_DIAG, data = X_test_filtered_ohe[, cat_features_ohe], fullRank = FALSE)
@@ -688,12 +705,14 @@ df_dummies <- predict(dummies, newdata = X_test_filtered_ohe)
 X_test_filtered_ohe <- cbind(X_test_filtered_ohe[, !(names(X_test_filtered_ohe) %in% c('CAND_DIAG'))], df_dummies)
 
 # Review the structure of the updated dataframe
-str(X_test_filtered_ohe)
+colnames(X_test_filtered_ohe)
 
 ```
 
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 X_train_filtered_ohe %<>% 
   rename(
@@ -724,9 +743,8 @@ X_test_filtered_ohe %<>%
 
 ```
 
-
 ```{python catboost-r-data2}
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -746,12 +764,12 @@ cat_index_one_hot = get_categorical_indexes(X_train_one_hot)
 
 ```
 
-#### Optuna Hyperparameter Optimization - One Hot Model
+#### Optuna Hyperparameter Optimization
 
-```{python optuna-hyperparameter-optimization-one-hot, eval=FALSE}
+```{python optuna-one-hot-CD, eval=FALSE}
 
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -795,7 +813,7 @@ for key, value in study.best_trial.params.items():
 
 ```
 
-- From Optuna Trial #1/25 with value: 0.739
+-   From Optuna Trial #1/25 with value: 0.739
 
 ```{python optuna-params3}
 
@@ -812,7 +830,7 @@ model_params3 = {
 ```{python catboost-model-one-hot-encoding}
 
 #| eval: true
-#| echo: true
+#| echo: false
 #| message: false
 #| warning: false
 
@@ -820,7 +838,7 @@ from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier, Pool
 
 
-filtered_model_one_hot = CatBoostClassifier(iterations=8000,
+one_hot_model_CD = CatBoostClassifier(iterations=8000,
                                objective='Logloss',
                                eval_metric='AUC',
                                **model_params3, 
@@ -837,17 +855,30 @@ train_pool = Pool(X_train_one_hot, Y, cat_features=get_categorical_indexes(X_tra
 test_pool = Pool(X_test_one_hot, Y_test, cat_features=get_categorical_indexes(X_train_one_hot))
  
 
-filtered_model_one_hot.fit(train_pool, eval_set=test_pool)
+one_hot_model_CD.fit(train_pool, eval_set=test_pool)
 
-gain_one_hot = filtered_model_one_hot.get_feature_importance(prettified=True)
-loss_one_hot = filtered_model_one_hot.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
+gain_one_hot = one_hot_model_CD.get_feature_importance(prettified=True)
+loss_one_hot = one_hot_model_CD.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
+
+```
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+one_hot_model_CD.save_model("models/one_hot_CD",
+           format="cbm",
+           export_parameters=None,
+           pool=None)
+
 
 ```
 
 #### Feature Importances: Candidate Diagnosis One Hot Encoding
 
 ```{r feature-importance-one-hot}
-#| echo: true
+#| echo: false
 #| layout-ncol: 1
 #| label: tbl-feature-importance-one-hot
 #| tbl-cap: "CatBoost Feature Importance with One-Hot Encoding"
@@ -886,13 +917,16 @@ loss_table_ohe
 #### Model Metrics
 
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
 from sklearn.metrics import roc_auc_score, brier_score_loss, accuracy_score, log_loss
 import pandas as pd
 
-Y_Pred = filtered_model_one_hot.predict(X_test_one_hot)
+Y_Pred = one_hot_model_CD.predict(X_test_one_hot)
 
-Y_Pred_Proba_Positive = filtered_model_one_hot.predict_proba(X_test_one_hot)[:, 1]  # Probabilities of the positive class
+Y_Pred_Proba_Positive = one_hot_model_CD.predict_proba(X_test_one_hot)[:, 1]  # Probabilities of the positive class
 
 # Calculate AUC
 auc = roc_auc_score(Y_test, Y_Pred_Proba_Positive)
@@ -917,10 +951,12 @@ print(candidate_diagnosis_one_hot)
 
 ```
 
-
 ### CatBoost One Hot Encoding: All
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 cat_features_ohe <- names(X_train_filtered_ohe)[sapply(X_train_filtered_ohe, is.factor)]
 
@@ -928,9 +964,10 @@ cat_features_ohe
 
 ```
 
-
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # Create the dummy variables specification for all categorical features
 dummies <- dummyVars(~ ., data = X_train_filtered_ohe[, cat_features_ohe], fullRank = FALSE)
@@ -946,8 +983,10 @@ colnames(X_train_filtered_ohe)
 
 ```
 
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # Create the dummy variables specification for all categorical features
 dummies <- dummyVars(~ ., data = X_test_filtered_ohe[, cat_features_ohe], fullRank = FALSE)
@@ -963,8 +1002,10 @@ colnames(X_test_filtered_ohe)
 
 ```
 
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 X_train_filtered_ohe %<>% 
   select(-VAD_DEVICE_TY_TCR.Missing)
@@ -973,8 +1014,10 @@ colnames(X_train_filtered_ohe)
 
 ```
 
-
 ```{r}
+#| echo: true
+#| warning: false
+#| message: false
 
 # Rename columns in the training dataset
 X_train_filtered_ohe %<>% 
@@ -1062,7 +1105,7 @@ str(X_train_filtered_ohe)
 ```
 
 ```{python}
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -1079,12 +1122,12 @@ Y_test = np.array(r.y_test_ohe)
 
 ```
 
-#### Optuna Hyperparameter Optimization - One Hot Encoding All Model
+#### Optuna Hyperparameter Optimization - One Hot All
 
-```{python optuna-hyperparameter-optimization-one-hot, eval=FALSE}
+```{python optuna-one-hot-all, eval=FALSE}
 
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -1128,7 +1171,6 @@ for key, value in study.best_trial.params.items():
 
 ```
 
-
 ```{python optuna-params4}
 
 model_params4 = {
@@ -1141,11 +1183,10 @@ model_params4 = {
     
 ```
 
-
-```{python catboost-model-one-hot-encoding}
+```{python catboost-model-one-hot-encoding-all}
 
 #| eval: true
-#| echo: true
+#| echo: false
 #| message: false
 #| warning: false
 
@@ -1153,7 +1194,7 @@ from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier, Pool
 
 
-filtered_one_hot_all = CatBoostClassifier(iterations=8000,
+one_hot_all = CatBoostClassifier(iterations=8000,
                                objective='Logloss',
                                eval_metric='AUC',
                                **model_params4, 
@@ -1170,18 +1211,19 @@ train_pool = Pool(X_train_one_hot_all, Y)
 test_pool = Pool(X_test_one_hot_all, Y_test)
  
 
-filtered_one_hot_all.fit(train_pool, eval_set=test_pool)
+one_hot_all.fit(train_pool, eval_set=test_pool)
 
-gain_one_hot_all = filtered_one_hot_all.get_feature_importance(prettified=True)
-loss_one_hot_all = filtered_one_hot_all.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
+gain_one_hot_all = one_hot_all.get_feature_importance(prettified=True)
+loss_one_hot_all = one_hot_all.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
 
 ```
+
 #### Feature Importances: One Hot Encoding All
 
 ```{r feature-importance-one-hot}
-#| echo: true
+#| echo: false
 #| layout-ncol: 1
-#| label: tbl-feature-importance-one-hot
+#| label: tbl-feature-importance-one-hot-all
 #| tbl-cap: "CatBoost Feature Importance with One-Hot Encoding"
 #| tbl-subcap: 
 #|   - "Gain"
@@ -1218,13 +1260,16 @@ loss_table_ohe_all
 #### Model Metrics
 
 ```{python}
+#| echo: false
+#| warning: false
+#| message: false
 
 from sklearn.metrics import roc_auc_score, brier_score_loss, accuracy_score, log_loss
 import pandas as pd
 
-Y_Pred_OHE_All = filtered_one_hot_all.predict(X_test_one_hot_all)
+Y_Pred_OHE_All = one_hot_all.predict(X_test_one_hot_all)
 
-Y_Pred_Proba_Positive_OHE_All = filtered_one_hot_all.predict_proba(X_test_one_hot_all)[:, 1]  # Probabilities of the positive class
+Y_Pred_Proba_Positive_OHE_All = one_hot_all.predict_proba(X_test_one_hot_all)[:, 1]  # Probabilities of the positive class
 
 # Calculate AUC
 auc = roc_auc_score(Y_test, Y_Pred_Proba_Positive_OHE_All)
@@ -1236,7 +1281,7 @@ accuracy = accuracy_score(Y_test, Y_Pred_OHE_All)
 log_loss_value = log_loss(Y_test, Y_Pred_Proba_Positive_OHE_All)
 
 # Create a DataFrame
-catboost_one_hot_all = pd.DataFrame({
+CB_one_hot_all = pd.DataFrame({
     'Model': ['Catboost_OHE_All'],
     'AUC': [auc],
     'Brier Score': [brier_score],
@@ -1244,17 +1289,30 @@ catboost_one_hot_all = pd.DataFrame({
     'Log Loss': [log_loss_value]
 })
 
-print(catboost_one_hot_all)
+print(CB_one_hot_all)
 
 
 ```
 
 ### XGBoost
 
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Combine features and labels into training and testing dataframes
+model_train <- cbind(X_train_filtered_ohe, Outcome = as.factor(y_train_ohe))
+model_test <- cbind(X_test_filtered_ohe, Outcome = as.factor(y_test_ohe))
+
+```
 
 #### Optuna Hyperparameter Optimization
 
-```{r}
+```{r optuna-xgboost-r, eval=FALSE}
+#| echo: false
+#| warning: false
+#| message: false
 
 library(reticulate)
 library(parsnip)
@@ -1264,14 +1322,10 @@ library(yardstick)
 # Import Optuna from Python
 optuna <- import("optuna")
 
-# Combine features and labels into training and testing dataframes
-model_train <- cbind(X_train_filtered_ohe, Outcome = as.factor(Y_train_ohe))
-model_test <- cbind(X_test_filtered_ohe, Outcome = as.factor(Y_test_ohe))
-
 # Define the objective function
 objective <- function(trial) {
   # Define the hyperparameters you want to tune
-  trees <- trial$suggest_int("trees", 100, 1000)
+  trees <- trial$suggest_int("trees", 1, 250)
   tree_depth <- trial$suggest_int("tree_depth", 1, 12)
   learn_rate <- trial$suggest_loguniform("learn_rate", 0.01, 0.1)
   min_n <- trial$suggest_int("min_n", 1, 10)
@@ -1324,44 +1378,39 @@ print(best_params)
 
 ```
 
-Best is trial #331/500 with value: 1.196 for log loss
-
-$trees
-[1] 100
-
-$tree_depth
-[1] 12
-
-$learn_rate
-[1] 0.01
-
-$min_n
-[1] 1
-
-$sample_size
-[1] 0.958
-
-$mtry
-[1] 10
-
+Best is trial #420/500 with value: 1.246 for log loss
 
 ```{r}
 
-# Load required libraries
+xgb_best_params <- list(
+  trees = 1,
+  tree_depth = 7,
+  learn_rate = 0.01,
+  min_n = 8,
+  sample_size = 0.538,
+  mtry = 8
+)
+
+```
+
+```{r xgboost-model, warning=FALSE, message=FALSE}
+#| echo: false
+#| warning: false
+#| message: false
+
 library(parsnip)
-library(dplyr)
 library(yardstick)
 
 
 # XGBoost model specification
 xgb_spec <- boost_tree(
-  trees = 100,
-  tree_depth = 12,
-  min_n = 1,
+  trees = xgb_best_params$trees,
+  tree_depth = xgb_best_params$tree_depth,
+  min_n = xgb_best_params$min_n,
+  sample_size = xgb_best_params$sample_size,
+  mtry = xgb_best_params$mtry,
+  learn_rate = xgb_best_params$learn_rate,
   loss_reduction = 0.01,
-  sample_size = 0.72,
-  mtry = 10,
-  learn_rate = 0.01,
   engine = "xgboost"
 ) %>%
   set_mode("classification")
@@ -1374,45 +1423,62 @@ xgb_fit <- fit(
 )
 
 # Make predictions on the test data
-predictions <- predict(xgb_fit, new_data = model_test, type = "prob") %>%
+xgb_predictions <- predict(xgb_fit, new_data = model_test, type = "prob") %>%
   bind_cols(predict(xgb_fit, new_data = model_test)) %>%
   dplyr::mutate(truth = model_test$Outcome)
+
 ```
 
 #### Model Metrics
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
 # Evaluate the model performance
-accuracy <- predictions %>%
+xgb_accuracy <- xgb_predictions %>%
   metrics(truth = truth, estimate = .pred_class) %>%
   filter(.metric == "accuracy") %>%
   pull(.estimate)
 
-brier_score <- mean((predictions$.pred_1 - as.numeric(predictions$truth) - 1) ^ 2)
+xgb_brier_score <- mean((xgb_predictions$.pred_1 - as.numeric(xgb_predictions$truth) - 1) ^ 2)
 
-roc_auc <- predictions %>%
+xgb_roc_auc <- xgb_predictions %>%
   roc_auc(truth = truth, .pred_1) %>%
   pull(.estimate)
 
-log_loss <- predictions %>%
+xgb_log_loss <- xgb_predictions %>%
   mn_log_loss(truth = truth, .pred_1) %>%
   pull(.estimate)
 
-cat("Accuracy:", accuracy, "\n")
-cat("Brier Score:", brier_score, "\n")
-cat("ROC AUC:", roc_auc, "\n")
-cat("Log Loss:", log_loss, "\n")
 
 ```
 
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Create a DataFrame
+xgboost = pd.DataFrame({
+    'Model': ['XGBoost'],
+    'AUC': [r.xgb_roc_auc],
+    'Brier Score': [r.xgb_brier_score],
+    'Accuracy': [r.xgb_accuracy],
+    'Log Loss': [r.xgb_log_loss]
+})
+
+print(xgboost)
+
+```
 
 ### Random Forest
 
-
-#### Optuna Hyperparameter Optimization
-
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # Function to summarize missing data
 summarize_missing_data <- function(data) {
@@ -1435,8 +1501,10 @@ print(missing_test)
 
 ```
 
-
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # Drop columns with more than 500 missing values
 columns_to_drop <- missing_train %>%
@@ -1454,7 +1522,11 @@ print("Columns dropped from training and testing sets:")
 print(columns_to_drop)
 
 ```
+
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
 
 # Drop rows with any remaining missing values in training and testing sets
 model_train <- model_train %>%
@@ -1470,8 +1542,13 @@ print(summarize_missing_data(model_test))
 
 ```
 
+#### Optuna Hyperparameter Optimization
 
-```{r}
+```{r optuna-random-forest-r}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: false
 
 library(reticulate)
 library(parsnip)
@@ -1484,7 +1561,7 @@ optuna <- import("optuna")
 # Define the objective function
 objective <- function(trial) {
   # Define the hyperparameters you want to tune
-  trees <- trial$suggest_int("trees", 100, 1000)
+  trees <- trial$suggest_int("trees", 1, 1000)
   min_n <- trial$suggest_int("min_n", 1, 10)
   mtry <- trial$suggest_int("mtry", 1, 10)
   
@@ -1532,24 +1609,28 @@ print(best_params)
 
 ```
 
-Best is trial #247/500 with value: 2.73.
-$trees
-[1] 766
-
-$min_n
-[1] 1
-
-$mtry
-[1] 10
-
+Best is trial #133/500 with value: 2.58.
 
 ```{r}
 
-# Fit the final model with the best hyperparameters
+rf_best_params <- list(
+  trees = 934,
+  min_n = 1,
+  mtry = 9
+)
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Fit the final model with best hyperparameters
 final_rf_spec <- rand_forest(
-  trees = best_params$trees,
-  min_n = best_params$min_n,
-  mtry = best_params$mtry
+  trees = rf_best_params$trees,
+  min_n = rf_best_params$min_n,
+  mtry = rf_best_params$mtry
 ) %>%
   set_engine("randomForest") %>%
   set_mode("classification")
@@ -1561,35 +1642,284 @@ final_rf_fit <- fit(
 )
 
 # Predict on the test set
-test_predictions <- predict(final_rf_fit, new_data = model_test, type = "prob") %>%
+rf_predictions <- predict(final_rf_fit, new_data = model_test, type = "prob") %>%
   bind_cols(predict(final_rf_fit, new_data = model_test)) %>%
   dplyr::mutate(truth = model_test$Outcome)
+
+
 ```
 
 #### Model Metrics
 
 ```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
 # Evaluate the model performance
-accuracy <- test_predictions %>%
+rf_accuracy <- rf_predictions %>%
   metrics(truth = truth, estimate = .pred_class) %>%
   filter(.metric == "accuracy") %>%
   pull(.estimate)
 
-brier_score <- mean((test_predictions$.pred_1 - as.numeric(test_predictions$truth) - 1) ^ 2)
+rf_brier_score <- mean((rf_predictions$.pred_1 - as.numeric(rf_predictions$truth) - 1) ^ 2)
 
-roc_auc <- test_predictions %>%
+rf_roc_auc <- rf_predictions %>%
   roc_auc(truth = truth, .pred_1) %>%
   pull(.estimate)
 
-log_loss <- test_predictions %>%
+rf_log_loss <- rf_predictions %>%
   mn_log_loss(truth = truth, .pred_1) %>%
   pull(.estimate)
 
-cat("Accuracy:", accuracy, "\n")
-cat("Brier Score:", brier_score, "\n")
-cat("ROC AUC:", roc_auc, "\n")
-cat("Log Loss:", log_loss, "\n")
 
+```
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Create a DataFrame
+random_forest = pd.DataFrame({
+    'Model': ['RandomForest'],
+    'AUC': [r.rf_roc_auc],
+    'Brier Score': [r.rf_brier_score],
+    'Accuracy': [r.rf_accuracy],
+    'Log Loss': [r.rf_log_loss]
+})
+
+print(random_forest)
+
+```
+
+### Oblique Random Forest
+
+-   Training Data
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Missing values per column
+missing_per_column <- colSums(is.na(survival_model))
+
+# Identify columns to drop (those with over 500 missing values)
+columns_to_drop <- names(missing_per_column[missing_per_column > 500])
+
+# Drop identified columns
+survival_model_cleaned <- survival_model %>%
+  select(-one_of(columns_to_drop))
+
+# Print the columns that were dropped
+cat("Columns dropped due to excessive missing values:\n")
+print(columns_to_drop)
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Drop rows with any remaining missing values
+survival_model_cleaned <- survival_model_cleaned %>%
+  mutate(outcome = as.factor(outcome)) %>% 
+  drop_na()
+
+survival_model_cleaned %>%
+  str()
+
+```
+
+-   Validation Data
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Missing values per column
+missing_per_column <- colSums(is.na(survival_model_test))
+
+# Identify columns to drop (those with over 500 missing values)
+columns_to_drop <- names(missing_per_column[missing_per_column > 500])
+
+# Drop identified columns
+survival_model_test_cleaned <- survival_model_test %>%
+  select(-one_of(columns_to_drop))
+
+# Print the columns that were dropped
+cat("Columns dropped due to excessive missing values:\n")
+print(columns_to_drop)
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Drop rows with any remaining missing values
+survival_model_test_cleaned <- survival_model_test_cleaned %>%
+  mutate(outcome = as.factor(outcome)) %>% 
+  drop_na()
+
+survival_model_test_cleaned %>%
+  str()
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| 
+survival_model_ <- rbind(survival_model_cleaned, survival_model_test_cleaned)
+
+```
+
+```{r}
+
+library(aorsf)
+
+# An oblique classification RF
+aorf_model <- orsf(data = survival_model_,
+                    n_tree = 100, 
+                    formula = outcome ~ .)
+
+aorf_model
+
+```
+
+#### Feature Importances
+
+```{r}
+
+ aorf_feature_importances <- orsf_vi_anova(aorf_model) 
+
+# Create a dataframe with named columns (feature) sorted by value (Importance)
+aorf_feature_importances_df <- data.frame(
+  Feature = names(aorf_feature_importances),
+  Importance = as.numeric(aorf_feature_importances)
+) %>%
+  arrange(desc(Importance))
+
+# Print the feature importances dataframe
+print(aorf_feature_importances_df)
+
+```
+
+```{r echo=FALSE}
+
+aorf_predictions <- aorf_model$pred_oobag
+
+aorf_predict <- cbind(aorf_predictions, survival_model_["outcome"])
+
+aorf_roc_auc <- aorf_model$eval_oobag$stat_values
+
+```
+
+
+```{r echo=FALSE}
+
+colnames(aorf_predict) <- c("prob_0", "prob_1", "truth")
+
+aorf_predict <- aorf_predict %>%
+  mutate(truth = as.factor(truth),
+         prob_0 = as.numeric(prob_0),
+         prob_1 = as.numeric(prob_1))
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Calculate the ROC curve
+roc_curve <- pROC::roc(aorf_predict$truth, aorf_predict$prob_1, levels = rev(levels(aorf_predict$truth)))
+
+# Calculate the optimal threshold using Youden's J statistic
+optimal_threshold <- pROC::coords(roc_curve, "best", ret = "threshold")
+
+cat("Optimal Threshold:", optimal_threshold$threshold, "\n")
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Convert probabilities to class labels based on the optimal threshold
+aorf_predict <- aorf_predict %>%
+  mutate(pred_class = ifelse(prob_1 > optimal_threshold$threshold, 1, 0))
+
+# Ensure truth and pred_class are factors
+aorf_predict <- aorf_predict %>%
+  mutate(pred_class = as.factor(pred_class))
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Evaluate the model performance
+aorf_accuracy <- aorf_predict %>%
+  metrics(truth = truth, estimate = pred_class) %>%
+  filter(.metric == "accuracy") %>%
+  pull(.estimate)
+
+aorf_roc_auc <- aorf_predict %>%
+  roc_auc(truth = truth, prob_1) %>%
+  pull(.estimate)
+
+aorf_log_loss <- aorf_predict %>%
+  mn_log_loss(truth = truth, prob_1) %>%
+  pull(.estimate)
+
+aorf_brier_score <- aorf_predict %>%
+  brier_class(truth = truth, prob_1) %>%
+  pull(.estimate)
+
+
+```
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Create a DataFrame
+ao_random_forest = pd.DataFrame({
+    'Model': ['AcceleratedObliqueRandomForest'],
+    'AUC': [r.aorf_roc_auc],
+    'Brier Score': [r.aorf_brier_score],
+    'Accuracy': [r.aorf_accuracy],
+    'Log Loss': [r.aorf_log_loss]
+})
+
+print(ao_random_forest)
+
+```
+
+### Final Model Accuracy Metrics
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+final_model_accuaracy_metrics <- rbind(py$catboost_native, py$feature_importance_model_df, py$candidate_diagnosis_one_hot,  py$CB_one_hot_all, py$xgboost, py$random_forest, py$ao_random_forest )
+
+
+final_model_accuaracy_metrics
 
 ```
 
@@ -1597,21 +1927,25 @@ cat("Log Loss:", log_loss, "\n")
 
 ```{python shap-setup}
 
-#| eval: false
-#| echo: true
+#| eval: true
+#| echo: false
 #| message: false
 #| warning: false
 
 import shap
 
-explainer = shap.TreeExplainer(filtered_one_hot_all)
-shap_values = explainer(X_train_one_hot_all)
+explainer = shap.TreeExplainer(one_hot_model_CD)
+shap_values = explainer(X_train_one_hot)
     
 ```
 
 #### Beeswarm (Top Features - Categorical and Numerical)
 
 ```{python}
+#| eval: false
+#| echo: false
+#| message: false
+#| warning: false
 
 mean_abs_shap_values = np.mean(np.abs(shap_values.values), axis=0)
 
@@ -1624,7 +1958,7 @@ filtered_shap_values = shap_values[:, top_indices]
 
 ```{python shap-setup2}
 #| eval: false
-#| echo: true
+#| echo: false
 #| message: false
 #| warning: false
 
@@ -1653,7 +1987,7 @@ plt.savefig('images/shapley_beeswarm.png', dpi=1200)
 
 ```{python shapley-bar-chart}
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 #| label: fig-net-effect
@@ -1677,26 +2011,21 @@ plt.savefig('images/shapley_bar_one_hot.png', dpi=1200)
 
 ```
 
-![Feature Importance Chart](images/shapley_bar_one_hot.png){#fig-shap-numerical-beeswarm-chart}
+![Feature Importance Chart](images/shapley_bar_one_hot.png){#fig-shap-bar-chart}
 
-```{r}
+```{python}
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
-# Numeric Column Indexes
-numeric_column_indexes <- which(sapply(one_hot_train_data , is.numeric))
 
-# Convert to Python index format (zero-based)
-python_numeric_column_indexes <- numeric_column_indexes - 1
+num_features = X_train_one_hot.select_dtypes(include=['number']).columns.tolist()
+print("Numerical Features:", num_features)
 
-# Factor Column Names
-factor_column_names <- names(one_hot_train_data)[sapply(one_hot_train_data, is.factor)]
-
-# Numeric Column Names
-numeric_column_names <- names(one_hot_train_data)[sapply(one_hot_train_data, is.numeric)]
-
+# Get the indices of numerical features
+num_feature_indices = [X_train_one_hot.columns.get_loc(col) for col in num_features]
+print("Indices of Numerical Features:", num_feature_indices)
 
 ```
 
@@ -1704,7 +2033,7 @@ numeric_column_names <- names(one_hot_train_data)[sapply(one_hot_train_data, is.
 
 ```{python beeswarm-numerical-features}
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 #| out-width: 70%
@@ -1721,10 +2050,9 @@ shap.initjs()
 plt.close()
 plt.close()
 
-num_features = r.numeric_column_names
 
 # Subset the SHAP values to only include the numerical features
-numerical_shap_values = shap_values[:, num_features]
+numerical_shap_values = shap_values[:, num_feature_indices]
 
 # Plot the beeswarm for only the numerical features
 shap.plots.beeswarm(numerical_shap_values,20)
@@ -1742,7 +2070,7 @@ plt.savefig('images/shapley_beeswarm_numerical.png', dpi=1200, bbox_inches="tigh
 
 ```{python correlation-plot}
 #| eval: false
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 #| out-width: 70%
@@ -1768,11 +2096,11 @@ plt.savefig('images/shap_correlation_plot.png', dpi=1200, bbox_inches="tight")
 
 ```
 
-![SHAP Value Correlation plot Beeswarm Chart](images/shap_correlation_plot.png){#fig-shap-correlation-plot}
+![SHAP Value Correlation Plot](images/shap_correlation_plot.png){#fig-shap-correlation-plot}
 
 #### SHAP Value Feature Importance - Mean Absolute Value
 
-```{r shap-values, eval=FALSE}
+```{r shap-values, eval=TRUE}
 
 # SHAP values
 shap_values <- py$shap_values
@@ -1786,15 +2114,15 @@ names(shap_df) <- shap_values$feature_names
 
 ```
 
-```{r mean-absolute-shap-values, eval=FALSE}
+```{r mean-absolute-shap-values, eval=TRUE}
 
-features <- names(one_hot_train_data)
+features <- names(py$X_train_one_hot)
 
 mean_abs_shap_values <- colMeans(abs(shap_df))  # Compute mean absolute SHAP values
 
 ```
 
-```{r radar-chart, eval=FALSE}
+```{r radar-chart, eval=TRUE}
 
 library(plotly)
 
@@ -1829,18 +2157,16 @@ plot <- generate_radar_plot(threshold)
 plot
 
 ```
-![SHAP Mean Absolute Value Radar Chart](images/radar_chart.png){#fig-shap-radar-chart}
 
-#### SHAP Value Radar Chart Feature Importance - Mean Positive and Mean Negative Values 
+#### SHAP Value Radar Chart Feature Importance - Mean Positive and Mean Negative Values
 
-Negative SHAP values in a binary classification where "1" is positive indicate that the feature decreases the probability of the positive outcome. 
+Negative SHAP values in a binary classification where "1" is positive indicate that the feature decreases the probability of the positive outcome.
 
-Low values for Median # Refusals and low values for Median Wait Days - pushes prediction to the '0' class - 'Survival'.
+Low values for Median \# Refusals and low values for Median Wait Days - pushes prediction to the '0' class - 'Survival'.
 
 This visualization represents the positive and negative values for the 'Positive' Class ('1'). For situations that are based on both clasess (ie. One hot encoded values where SHAP value refers to the presence or absence of value) a Beeswarm chart is more appropriate. (See Dilated Cardiomyopathy for example - high positive SHAP value for absence of feature)
 
-
-```{r pos-neg-shap-values, eval=FALSE}
+```{r pos-neg-shap-values, eval=TRUE}
 
 # Model Features
 features <- names(shap_df)
@@ -1860,9 +2186,7 @@ negative_shap_values <- abs(negative_shap_values)
 
 ```
 
-```{r radar-chart-positive-negative, eval=FALSE}
-
-library(plotly)
+```{r radar-chart-positive-negative, eval=TRUE, warning=FALSE, message=FALSE}
 
 # Function to generate radar plot with positive and negative SHAP values
 generate_radar_plot_pos_neg <- function(threshold) {
@@ -1909,4 +2233,3 @@ plot <- generate_radar_plot_pos_neg(threshold)
 plot
 
 ```
-![SHAP Mean Absolute Value Radar Chart - Positive and Negative](images/radar_chart2.png){#fig-shap-radar-chart-positive-negative}
