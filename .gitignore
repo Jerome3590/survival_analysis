@@ -19,5 +19,22 @@ html/*
 
 Literature_Review/*
 
+center-stats.qmd
+firezer-analysis.qmd
+firezer-data.qmd
+model_data.qmd
+survival_analysis_aft.qmd
+survival_analysis_cox.qmd
+survival_analysis_lasso.qmd
+survival_analysis_binary_classification.qmd
+survival_analysis_binary_classification2.qmd
+survival_analysis_binary_classification3.qmd
+survival_analysis_binary_classification.qmd
+survival_analysis_final_model.qmd
+survival_analysis_shap_values.qmd
+
+waitlist-data.qmd
+waitlist-data2.qmd
+
 
 
