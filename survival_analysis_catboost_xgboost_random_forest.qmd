@@ -55,15 +55,15 @@ survival_model <- read_rds(here("data","model_data_train.rds"))
 
 survival_model %<>%
   mutate_if(is.character, as.factor) 
- 
-colnames(survival_model) 
+
+colnames(survival_model)
 
 ```
 
 ```{r}
 
 survival_model %<>% 
-  select(-median_refusals_old,-LISTING_CTR_CODE, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -starts_with("median_wait_days"))
+  select(-median_refusals_old,-LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG)
 
 ```
 
@@ -77,15 +77,14 @@ survival_model_test <- read_rds(here("data","model_data_test.rds"))
 
 survival_model_test %<>%
   mutate_if(is.character, as.factor) 
- 
-colnames(survival_model_test)
+
 
 ```
 
 ```{r}
 
 survival_model_test %<>% 
-  select(-median_refusals_old, -LISTING_CTR_CODE, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -starts_with("median_wait_days"))
+  select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG)
 
 ```
 
@@ -273,15 +272,16 @@ for key, value in study.best_trial.params.items():
 
 
 ```
+- Best is trial #18/25 with value: 0.74067
 
 ```{python optuna-params1}
 
-model_params = {
-    'learning_rate': 0.11,
+model_params1 = {
+    'learning_rate': 0.238,
     'depth': 2,
-    'colsample_bylevel': 0.16,
-    'min_data_in_leaf': 85,
-    'l2_leaf_reg': 4.43
+    'colsample_bylevel': 0.326,
+    'min_data_in_leaf': 6,
+    'l2_leaf_reg': 8.41
 }
     
 ```
@@ -289,7 +289,7 @@ model_params = {
 ```{python catboost-model-auc}
 
 #| eval: true
-#| echo: false
+#| echo: true
 #| message: false
 #| warning: false
 
@@ -306,7 +306,7 @@ cat_indexes = get_categorical_indexes(X_train)
 model_auc = CatBoostClassifier(iterations=1000,
                                objective='Logloss',
                                eval_metric="AUC",
-                               **model_params, 
+                               **model_params1, 
                                boosting_type= 'Ordered',
                                bootstrap_type='MVS',
                                metric_period=25,
@@ -504,10 +504,10 @@ for key, value in study.best_trial.params.items():
 
 model_params2 = {
     'learning_rate': 0.12,
-    'depth': 9,
-    'colsample_bylevel': 0.11,
-    'min_data_in_leaf': 2,
-    'l2_leaf_reg': 8.76
+    'depth': 5,
+    'colsample_bylevel': 0.0639,
+    'min_data_in_leaf': 21,
+    'l2_leaf_reg': 5.88
 }
     
 ```
@@ -515,7 +515,7 @@ model_params2 = {
 ```{python catboost-filtered-by-feature-importance}
 
 #| eval: true
-#| echo: false
+#| echo: true
 #| message: false
 #| warning: false
 
@@ -813,16 +813,16 @@ for key, value in study.best_trial.params.items():
 
 ```
 
--   From Optuna Trial #1/25 with value: 0.739
+-   From Optuna Trial #7/25 with value: 0.742
 
 ```{python optuna-params3}
 
 model_params3 = {
-    'learning_rate': 0.17,
-    'depth': 6,
-    'colsample_bylevel': 0.13,
-    'min_data_in_leaf': 30,
-    'l2_leaf_reg': 10.54
+    'learning_rate': 0.092,
+    'depth': 7,
+    'colsample_bylevel': 0.533,
+    'min_data_in_leaf': 25,
+    'l2_leaf_reg': 4.976
 }
     
 ```
@@ -830,7 +830,7 @@ model_params3 = {
 ```{python catboost-model-one-hot-encoding}
 
 #| eval: true
-#| echo: false
+#| echo: true
 #| message: false
 #| warning: false
 
@@ -1003,18 +1003,6 @@ colnames(X_test_filtered_ohe)
 ```
 
 ```{r}
-#| echo: false
-#| warning: false
-#| message: false
-
-X_train_filtered_ohe %<>% 
-  select(-VAD_DEVICE_TY_TCR.Missing)
-
-colnames(X_train_filtered_ohe)
-
-```
-
-```{r}
 #| echo: true
 #| warning: false
 #| message: false
@@ -1022,14 +1010,14 @@ colnames(X_train_filtered_ohe)
 # Rename columns in the training dataset
 X_train_filtered_ohe %<>% 
   rename(
-    CDL_CHD_With_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease With Surgery`,
-    CDL_CHD_Without_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease Without Surgery`,
-    CDL_Dilated_Cardiomyopathy = `CAND_DIAG_LISTING.Dilated Cardiomyopathy`,
-    CDL_Hypertrophic_Cardiomyopathy = `CAND_DIAG_LISTING.Hypertrophic Cardiomyopathy`,
-    CDL_Myocarditis = `CAND_DIAG_LISTING.Myocarditis`,
-    CDL_Other = `CAND_DIAG_LISTING.Other`,
-    CDL_Restrictive_Cardiomyopathy = `CAND_DIAG_LISTING.Restrictive Cardiomyopathy`,
-    CDL_Valvular_Heart_Disease = `CAND_DIAG_LISTING.Valvular Heart Disease`,
+    #CDL_CHD_With_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease With Surgery`,
+    #CDL_CHD_Without_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease Without Surgery`,
+    #CDL_Dilated_Cardiomyopathy = `CAND_DIAG_LISTING.Dilated Cardiomyopathy`,
+    #CDL_Hypertrophic_Cardiomyopathy = `CAND_DIAG_LISTING.Hypertrophic Cardiomyopathy`,
+    #CDL_Myocarditis = `CAND_DIAG_LISTING.Myocarditis`,
+    #CDL_Other = `CAND_DIAG_LISTING.Other`,
+    #CDL_Restrictive_Cardiomyopathy = `CAND_DIAG_LISTING.Restrictive Cardiomyopathy`,
+    #CDL_Valvular_Heart_Disease = `CAND_DIAG_LISTING.Valvular Heart Disease`,
     CDC_1000 = `CAND_DIAG_CODE.1000: Dilated Cardiomyopathy`,
     CDC_1001 = `CAND_DIAG_CODE.1001: Dilated Cardiomyopathy`,
     CDC_1002 = `CAND_DIAG_CODE.1002: Dilated Cardiomyopathy`,
@@ -1062,14 +1050,14 @@ X_train_filtered_ohe %<>%
 # Rename columns in the test dataset
 X_test_filtered_ohe %<>% 
   rename(
-    CDL_CHD_With_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease With Surgery`,
-    CDL_CHD_Without_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease Without Surgery`,
-    CDL_Dilated_Cardiomyopathy = `CAND_DIAG_LISTING.Dilated Cardiomyopathy`,
-    CDL_Hypertrophic_Cardiomyopathy = `CAND_DIAG_LISTING.Hypertrophic Cardiomyopathy`,
-    CDL_Myocarditis = `CAND_DIAG_LISTING.Myocarditis`,
-    CDL_Other = `CAND_DIAG_LISTING.Other`,
-    CDL_Restrictive_Cardiomyopathy = `CAND_DIAG_LISTING.Restrictive Cardiomyopathy`,
-    CDL_Valvular_Heart_Disease = `CAND_DIAG_LISTING.Valvular Heart Disease`,
+    #CDL_CHD_With_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease With Surgery`,
+    #CDL_CHD_Without_Surgery = `CAND_DIAG_LISTING.Congenital Heart Disease Without Surgery`,
+    #CDL_Dilated_Cardiomyopathy = `CAND_DIAG_LISTING.Dilated Cardiomyopathy`,
+    #CDL_Hypertrophic_Cardiomyopathy = `CAND_DIAG_LISTING.Hypertrophic Cardiomyopathy`,
+    #CDL_Myocarditis = `CAND_DIAG_LISTING.Myocarditis`,
+    #CDL_Other = `CAND_DIAG_LISTING.Other`,
+    #CDL_Restrictive_Cardiomyopathy = `CAND_DIAG_LISTING.Restrictive Cardiomyopathy`,
+    #CDL_Valvular_Heart_Disease = `CAND_DIAG_LISTING.Valvular Heart Disease`,
     CDC_1000 = `CAND_DIAG_CODE.1000: Dilated Cardiomyopathy`,
     CDC_1001 = `CAND_DIAG_CODE.1001: Dilated Cardiomyopathy`,
     CDC_1002 = `CAND_DIAG_CODE.1002: Dilated Cardiomyopathy`,
@@ -1174,11 +1162,11 @@ for key, value in study.best_trial.params.items():
 ```{python optuna-params4}
 
 model_params4 = {
-    'learning_rate': 0.02,
+    'learning_rate': 0.208,
     'depth': 3,
-    'colsample_bylevel': 0.59,
-    'min_data_in_leaf': 17,
-    'l2_leaf_reg': 10.52
+    'colsample_bylevel': 0.35,
+    'min_data_in_leaf': 14,
+    'l2_leaf_reg': 9.07
 }
     
 ```
@@ -1186,7 +1174,7 @@ model_params4 = {
 ```{python catboost-model-one-hot-encoding-all}
 
 #| eval: true
-#| echo: false
+#| echo: true
 #| message: false
 #| warning: false
 
@@ -1297,7 +1285,7 @@ print(CB_one_hot_all)
 ### XGBoost
 
 ```{r}
-#| echo: false
+#| echo: true
 #| warning: false
 #| message: false
 
@@ -1310,9 +1298,10 @@ model_test <- cbind(X_test_filtered_ohe, Outcome = as.factor(y_test_ohe))
 #### Optuna Hyperparameter Optimization
 
 ```{r optuna-xgboost-r, eval=FALSE}
-#| echo: false
+#| echo: true
 #| warning: false
 #| message: false
+#| eval: false
 
 library(reticulate)
 library(parsnip)
@@ -1378,25 +1367,26 @@ print(best_params)
 
 ```
 
-Best is trial #420/500 with value: 1.246 for log loss
+Best is trial #494/500 with value: .699 for log loss
 
 ```{r}
 
 xgb_best_params <- list(
   trees = 1,
-  tree_depth = 7,
+  tree_depth = 5,
   learn_rate = 0.01,
-  min_n = 8,
-  sample_size = 0.538,
-  mtry = 8
+  min_n = 6,
+  sample_size = 0.587,
+  mtry = 5
 )
 
 ```
 
-```{r xgboost-model, warning=FALSE, message=FALSE}
-#| echo: false
+```{r xgboost-model}
+#| echo: true
 #| warning: false
 #| message: false
+#| eval: true
 
 library(parsnip)
 library(yardstick)
@@ -1431,10 +1421,11 @@ xgb_predictions <- predict(xgb_fit, new_data = model_test, type = "prob") %>%
 
 #### Model Metrics
 
-```{r}
+```{r xgboost-model-metrics}
 #| echo: false
 #| warning: false
 #| message: false
+#| eval: true
 
 # Evaluate the model performance
 xgb_accuracy <- xgb_predictions %>%
@@ -1456,9 +1447,10 @@ xgb_log_loss <- xgb_predictions %>%
 ```
 
 ```{python}
-#| echo: false
+#| echo: true
 #| warning: false
 #| message: false
+#| eval: true
 
 # Create a DataFrame
 xgboost = pd.DataFrame({
@@ -1475,8 +1467,8 @@ print(xgboost)
 
 ### Random Forest
 
-```{r}
-#| echo: false
+```{r rf-setup}
+#| echo: true
 #| warning: false
 #| message: false
 
@@ -1501,7 +1493,7 @@ print(missing_test)
 
 ```
 
-```{r}
+```{r rf-preprocessing}
 #| echo: false
 #| warning: false
 #| message: false
@@ -1523,7 +1515,7 @@ print(columns_to_drop)
 
 ```
 
-```{r}
+```{r rf-preprocessing-cont}
 #| echo: false
 #| warning: false
 #| message: false
@@ -1544,8 +1536,8 @@ print(summarize_missing_data(model_test))
 
 #### Optuna Hyperparameter Optimization
 
-```{r optuna-random-forest-r}
-#| echo: false
+```{r optuna-random-forest}
+#| echo: true
 #| warning: false
 #| message: false
 #| eval: false
@@ -1609,20 +1601,20 @@ print(best_params)
 
 ```
 
-Best is trial #133/500 with value: 2.58.
+Best is trial #172/500 with value: 2.67.
 
 ```{r}
 
 rf_best_params <- list(
-  trees = 934,
+  trees = 986,
   min_n = 1,
-  mtry = 9
+  mtry = 10
 )
 
 ```
 
 ```{r}
-#| echo: false
+#| echo: true
 #| warning: false
 #| message: false
 
@@ -1651,7 +1643,7 @@ rf_predictions <- predict(final_rf_fit, new_data = model_test, type = "prob") %>
 
 #### Model Metrics
 
-```{r}
+```{r rf-model-metrics}
 #| echo: false
 #| warning: false
 #| message: false
@@ -1697,7 +1689,7 @@ print(random_forest)
 
 -   Training Data
 
-```{r}
+```{r oarfs-preprocessing}
 #| echo: false
 #| warning: false
 #| message: false
@@ -1728,9 +1720,6 @@ print(columns_to_drop)
 survival_model_cleaned <- survival_model_cleaned %>%
   mutate(outcome = as.factor(outcome)) %>% 
   drop_na()
-
-survival_model_cleaned %>%
-  str()
 
 ```
 
@@ -1768,21 +1757,21 @@ survival_model_test_cleaned <- survival_model_test_cleaned %>%
   mutate(outcome = as.factor(outcome)) %>% 
   drop_na()
 
-survival_model_test_cleaned %>%
-  str()
-
 ```
 
 ```{r}
 #| echo: false
 #| warning: false
 #| message: false
-#| 
+
 survival_model_ <- rbind(survival_model_cleaned, survival_model_test_cleaned)
 
 ```
 
-```{r}
+```{r aorf-model}
+#| echo: true
+#| warning: false
+#| message: false
 
 library(aorsf)
 
@@ -1797,7 +1786,10 @@ aorf_model
 
 #### Feature Importances
 
-```{r}
+```{r aorf-feature-importance}
+#| echo: true
+#| warning: false
+#| message: false
 
  aorf_feature_importances <- orsf_vi_anova(aorf_model) 
 
@@ -1814,6 +1806,9 @@ print(aorf_feature_importances_df)
 ```
 
 ```{r echo=FALSE}
+#| echo: true
+#| warning: false
+#| message: false
 
 aorf_predictions <- aorf_model$pred_oobag
 
@@ -1825,6 +1820,9 @@ aorf_roc_auc <- aorf_model$eval_oobag$stat_values
 
 
 ```{r echo=FALSE}
+#| echo: true
+#| warning: false
+#| message: false
 
 colnames(aorf_predict) <- c("prob_0", "prob_1", "truth")
 
@@ -1836,7 +1834,7 @@ aorf_predict <- aorf_predict %>%
 ```
 
 ```{r}
-#| echo: false
+#| echo: true
 #| warning: false
 #| message: false
 
@@ -1934,8 +1932,8 @@ final_model_accuaracy_metrics
 
 import shap
 
-explainer = shap.TreeExplainer(one_hot_model_CD)
-shap_values = explainer(X_train_one_hot)
+explainer = shap.TreeExplainer(one_hot_all)
+shap_values = explainer(X_train_one_hot_all)
     
 ```
 
@@ -1949,7 +1947,7 @@ shap_values = explainer(X_train_one_hot)
 
 mean_abs_shap_values = np.mean(np.abs(shap_values.values), axis=0)
 
-top_n = 20
+top_n = 25
 top_indices = np.argsort(-mean_abs_shap_values)[:top_n]  # Indices of the top features
 
 filtered_shap_values = shap_values[:, top_indices]
@@ -2020,12 +2018,22 @@ plt.savefig('images/shapley_bar_one_hot.png', dpi=1200)
 #| message: false
 
 
-num_features = X_train_one_hot.select_dtypes(include=['number']).columns.tolist()
+# Get the list of all columns
+all_columns = X_train_one_hot_all.columns.tolist()
+
+# Function to check if a column is one-hot encoded
+def is_one_hot_encoded(column):
+    unique_values = X_train_one_hot_all[column].unique()
+    return set(unique_values).issubset({0, 1}) and len(unique_values) <= 2
+
+# Select numerical features that are not one-hot encoded
+num_features = [col for col in all_columns if X_train_one_hot_all[col].dtype in ['int64', 'float64'] and not is_one_hot_encoded(col)]
 print("Numerical Features:", num_features)
 
 # Get the indices of numerical features
-num_feature_indices = [X_train_one_hot.columns.get_loc(col) for col in num_features]
+num_feature_indices = [X_train_one_hot_all.columns.get_loc(col) for col in num_features]
 print("Indices of Numerical Features:", num_feature_indices)
+
 
 ```
 
@@ -2055,7 +2063,7 @@ plt.close()
 numerical_shap_values = shap_values[:, num_feature_indices]
 
 # Plot the beeswarm for only the numerical features
-shap.plots.beeswarm(numerical_shap_values,20)
+shap.plots.beeswarm(numerical_shap_values)
 
 plt.tight_layout()
 
@@ -2086,7 +2094,7 @@ import matplotlib.pyplot as plt
 # SHAP correlation plot
 corr_matrix = pd.DataFrame(numerical_shap_values.values, columns=num_features).corr()
 
-sns.set(font_scale=.2)
+sns.set(font_scale=.5)
 sns.heatmap(corr_matrix,cmap="coolwarm", center=0, annot=True, fmt =".1g")
 
 plt.tight_layout()
@@ -2100,7 +2108,11 @@ plt.savefig('images/shap_correlation_plot.png', dpi=1200, bbox_inches="tight")
 
 #### SHAP Value Feature Importance - Mean Absolute Value
 
-```{r shap-values, eval=TRUE}
+```{r shap-values}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
 
 # SHAP values
 shap_values <- py$shap_values
@@ -2114,15 +2126,23 @@ names(shap_df) <- shap_values$feature_names
 
 ```
 
-```{r mean-absolute-shap-values, eval=TRUE}
+```{r mean-absolute-shap-values}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
 
-features <- names(py$X_train_one_hot)
+features <- names(py$X_train_one_hot_all)
 
 mean_abs_shap_values <- colMeans(abs(shap_df))  # Compute mean absolute SHAP values
 
 ```
 
-```{r radar-chart, eval=TRUE}
+```{r radar-chart}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
 
 library(plotly)
 
@@ -2149,7 +2169,7 @@ generate_radar_plot <- function(threshold) {
 }
 
 # Plot
-threshold <- .025
+threshold <- .015
 plot <- generate_radar_plot(threshold)
 
 
@@ -2166,7 +2186,11 @@ Low values for Median \# Refusals and low values for Median Wait Days - pushes p
 
 This visualization represents the positive and negative values for the 'Positive' Class ('1'). For situations that are based on both clasess (ie. One hot encoded values where SHAP value refers to the presence or absence of value) a Beeswarm chart is more appropriate. (See Dilated Cardiomyopathy for example - high positive SHAP value for absence of feature)
 
-```{r pos-neg-shap-values, eval=TRUE}
+```{r pos-neg-shap-values}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
 
 # Model Features
 features <- names(shap_df)
@@ -2186,7 +2210,11 @@ negative_shap_values <- abs(negative_shap_values)
 
 ```
 
-```{r radar-chart-positive-negative, eval=TRUE, warning=FALSE, message=FALSE}
+```{r radar-chart-positive-negative}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
 
 # Function to generate radar plot with positive and negative SHAP values
 generate_radar_plot_pos_neg <- function(threshold) {
@@ -2226,7 +2254,7 @@ generate_radar_plot_pos_neg <- function(threshold) {
 }
 
 # Define a threshold for SHAP value significance
-threshold <- 0.025
+threshold <- 0.015
 
 # Generate and print the plot
 plot <- generate_radar_plot_pos_neg(threshold)
