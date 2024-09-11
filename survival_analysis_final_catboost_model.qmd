@@ -348,7 +348,7 @@ for key, value in study.best_trial.params.items():
 
 ```{python optuna-params1}
 
-model_params1 = {
+model_params_native = {
     'learning_rate': 0.28,
     'depth': 4,
     'colsample_bylevel': 0.8256,
@@ -379,7 +379,7 @@ cat_indexes = get_categorical_indexes(X_train)
 model_auc = CatBoostClassifier(objective='Logloss',
                                iterations=1000,
                                eval_metric="AUC",
-                               **model_params1, 
+                               **model_params_native, 
                                boosting_type='Ordered',
                                bootstrap_type='MVS',
                                metric_period=25,
@@ -1084,12 +1084,26 @@ loss_table_ohe
 #| warning: false
 #| message: false
 
-final_model_accuaracy_metrics <- rbind(py$catboost_metrics_native, py$catboost_metrics_hybrid )
+final_model_accuracy_metrics <- rbind(py$catboost_metrics_native, py$catboost_metrics_hybrid )
 
 
-final_model_accuaracy_metrics
+model_accuracy <- final_model_accuracy_metrics[1:9]
+
+model_confusion_matrix <- final_model_accuracy_metrics[c(1,10:13)]
 
 ```
+
+```{r}
+
+model_accuracy
+
+```
+
+```{r}
+model_confusion_matrix
+```
+
+
 
 ### SHAP Value Analysis for Hybrid Model - Slight loss in accuracy but more explainable to the feature level and higher Recall.
 
