@@ -1,5 +1,5 @@
 ---
-title: "Survival Analysis: CatBoost Models"
+title: "Survival Analysis: CatBoost"
 author: "R. Jerome Dixon"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 format:
@@ -37,12 +37,43 @@ library(quarto)
 library(plotly)
 library(probably)
 library(pROC)
+library(lubridate)
+library(digest)
 
 (options)(scipen=999)
 
 ```
 
 ### Survival Model Dataset
+
+```{r}  
+
+hash_numeric_string_to_letters <- Vectorize(function(input_str) {
+  # Ensure the input is a numeric string
+  if (!grepl("^[0-9]+$", input_str)) {
+    stop("Input should be a numeric string")
+  }
+  
+  # Hash the input string using MD5
+  md5_hash <- digest(input_str, algo = "md5", serialize = FALSE)
+  
+  # Define the set of letters to use (lowercase a-z)
+  letters <- unlist(strsplit("abcdefghijklmnopqrstuvwxyz", ""))
+  
+  # Convert the first 12 hex digits of the hash into a 6-letter string
+  result <- c()
+  for (i in seq(1, 12, by = 2)) {
+    hex_value <- substr(md5_hash, i, i+1)  # Take 2 hex digits
+    int_value <- strtoi(hex_value, base = 16)  # Convert hex to int
+    letter_index <- (int_value %% length(letters)) + 1  # Map to one of the 26 letters
+    result <- c(result, letters[letter_index])
+  }
+  
+  # Join the list of letters into a string and return
+  return(paste(result, collapse = ""))
+})
+
+```
 
 ```{r load-dataset}
 #| echo: true
@@ -55,6 +86,11 @@ set.seed(1997)
 survival_model <- read_rds(here("data","model_data_train.rds"))
 
 survival_model %<>%
+  mutate(
+    List_Yr = as.factor(year(WL_DT)),
+    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0)
+  ) %>% 
+  mutate(List_Ctr = hash_numeric_string_to_letters(as.character(LISTING_CTR_CODE))) %>%
   mutate_if(is.character, as.factor) 
 
 ```
@@ -62,7 +98,7 @@ survival_model %<>%
 ```{r}
 
 survival_model %<>% 
-  select(-median_refusals_old,-LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS)
+  select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS, -LISTING_CTR_CODE)
 
 
 survival_model %<>%
@@ -78,27 +114,26 @@ survival_model %<>%
     PGE_TCR = PGE_TCR,
     ECMO_Reg = ECMO_CAND_REG,
     VAD_Reg = VAD_CAND_REG,
-    VAD_Device_TCR = VAD_DEVICE_TY_TCR,
-    Ventilator_Reg = VENTILATOR_CAND_REG,
-    Functional_Status_Reg = FUNC_STAT_CAND_REG,
-    WL_Other_Org = WL_OTHER_ORG,
-    Cerebral_Vascular = CEREB_VASC,
+    VAD_TCR = VAD_DEVICE_TY_TCR,
+    Vent_Reg = VENTILATOR_CAND_REG,
+    Status_Reg = FUNC_STAT_CAND_REG,
+    WL_Oth_Org = WL_OTHER_ORG,
+    Cereb_Vasc = CEREB_VASC,
     Diabetes = DIAB,
     Dialysis = DIALYSIS_CAND,
-    Defibrillator = IMPL_DEFIBRIL,
-    Inotropes = INOTROPES_TCR,
-    Recent_Creatine = MOST_RCNT_CREAT,
+    Defib = IMPL_DEFIBRIL,
+    Inotrop = INOTROPES_TCR,
+    Creatine = MOST_RCNT_CREAT,
     eGFR = eGFR,
     Albumin = TOT_SERUM_ALBUM,
-    Diagnostic_Code = CAND_DIAG,
-    Listing_Ctr_Code = LISTING_CTR_CODE,
-    Previous_Year_HRTX = pedhrtx_prev_yr,
-    Median_Refusals = median_refusals,
-    Proportion_Refusals = p_refusals,
-    Prelim_XMatch_Req = PRELIM_XMATCH_REQ
+    Diag_Code = CAND_DIAG,
+    Prior_HRTX = pedhrtx_prev_yr,
+    Med_Refusals = median_refusals,
+    Prop_Refusals = p_refusals,
+    XMatch_Req = PRELIM_XMATCH_REQ
   )
 
-colnames(survival_model)
+length(colnames(survival_model))
 
 ```
 
@@ -111,6 +146,11 @@ colnames(survival_model)
 survival_model_test <- read_rds(here("data","model_data_test.rds"))
 
 survival_model_test %<>%
+    mutate(
+    List_Yr = as.factor(year(WL_DT)),
+    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0)
+  ) %>% 
+  mutate(List_Ctr = hash_numeric_string_to_letters(as.character(LISTING_CTR_CODE))) %>%
   mutate_if(is.character, as.factor) 
 
 
@@ -119,7 +159,7 @@ survival_model_test %<>%
 ```{r}
 
 survival_model_test %<>% 
-  select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS)
+  select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS, -LISTING_CTR_CODE)
 
 survival_model_test %<>%
   rename(
@@ -134,25 +174,26 @@ survival_model_test %<>%
     PGE_TCR = PGE_TCR,
     ECMO_Reg = ECMO_CAND_REG,
     VAD_Reg = VAD_CAND_REG,
-    VAD_Device_TCR = VAD_DEVICE_TY_TCR,
-    Ventilator_Reg = VENTILATOR_CAND_REG,
-    Functional_Status_Reg = FUNC_STAT_CAND_REG,
-    WL_Other_Org = WL_OTHER_ORG,
-    Cerebral_Vascular = CEREB_VASC,
+    VAD_TCR = VAD_DEVICE_TY_TCR,
+    Vent_Reg = VENTILATOR_CAND_REG,
+    Status_Reg = FUNC_STAT_CAND_REG,
+    WL_Oth_Org = WL_OTHER_ORG,
+    Cereb_Vasc = CEREB_VASC,
     Diabetes = DIAB,
     Dialysis = DIALYSIS_CAND,
-    Defibrillator = IMPL_DEFIBRIL,
-    Inotropes = INOTROPES_TCR,
-    Recent_Creatine = MOST_RCNT_CREAT,
+    Defib = IMPL_DEFIBRIL,
+    Inotrop = INOTROPES_TCR,
+    Creatine = MOST_RCNT_CREAT,
     eGFR = eGFR,
     Albumin = TOT_SERUM_ALBUM,
-    Diagnostic_Code = CAND_DIAG,
-    Listing_Ctr_Code = LISTING_CTR_CODE,
-    Previous_Year_HRTX = pedhrtx_prev_yr,
-    Median_Refusals = median_refusals,
-    Proportion_Refusals = p_refusals,
-    Prelim_XMatch_Req = PRELIM_XMATCH_REQ
+    Diag_Code = CAND_DIAG,
+    Prior_HRTX = pedhrtx_prev_yr,
+    Med_Refusals = median_refusals,
+    Prop_Refusals = p_refusals,
+    XMatch_Req = PRELIM_XMATCH_REQ
   )
+
+length(colnames(survival_model))
 
 ```
 
@@ -167,6 +208,8 @@ cat_features_train
 ```{r}
 
 cat_features_test <- names(survival_model_test)[sapply(survival_model_test, is.factor)]
+
+cat_features_test
 
 ```
 
@@ -242,6 +285,9 @@ y_test = r.test_Y
 Y_test = np.array(y_test) 
 
 cat_index = get_categorical_indexes(X_train)
+cat_index2 = get_categorical_indexes(X_test)
+
+cat_index == cat_index2
 
 ```
 
@@ -343,16 +389,16 @@ for key, value in study.best_trial.params.items():
 
 ```
 
--   Best is trial #17/50 with value: 0.7367
+-   Best is trial #23/50 with value: 0.737
 
 ```{python optuna-params1}
 
 model_params_native = {
-    'learning_rate': 0.28,
-    'depth': 4,
-    'colsample_bylevel': 0.8256,
-    'min_data_in_leaf': 2,
-    'l2_leaf_reg': 3.744
+    'learning_rate': 0.06,
+    'depth': 8,
+    'colsample_bylevel': 0.32,
+    'min_data_in_leaf': 7,
+    'l2_leaf_reg': 4.9
 }
     
 ```
@@ -373,8 +419,6 @@ import optuna
 from catboost import CatBoostClassifier, Pool
 
 
-cat_indexes = get_categorical_indexes(X_train)
-
 model_auc = CatBoostClassifier(objective='Logloss',
                                iterations=1000,
                                eval_metric="AUC",
@@ -387,8 +431,8 @@ model_auc = CatBoostClassifier(objective='Logloss',
                                random_seed=1997)
 
 # Create a Pool object for the training and testing data
-train_pool = Pool(X_train, cat_features=cat_indexes, label=Y_train)
-test_pool = Pool(X_test, cat_features=cat_indexes, label=Y_test)
+train_pool = Pool(X_train, cat_features=cat_index, label=Y_train)
+test_pool = Pool(X_test, cat_features=cat_index, label=Y_test)
  
 
 model_auc.fit(train_pool, eval_set=test_pool)
@@ -622,14 +666,14 @@ str(one_hot_hybrid)
 
 one_hot_hybrid %<>%
   rename(
-    Congenital_HD_Surgery = `Diagnostic_Code.Congenital Heart Disease With Surgery`,
-    Congenital_HD_No_Surgery = `Diagnostic_Code.Congenital Heart Disease Without Surgery`,
-    Dilated_Cardiomyopathy = `Diagnostic_Code.Dilated Cardiomyopathy`,
-    Hypertrophic_Cardiomyopathy = `Diagnostic_Code.Hypertrophic Cardiomyopathy`,
-    Myocarditis = Diagnostic_Code.Myocarditis,
-    Other_Diagnosis = Diagnostic_Code.Other,
-    Restrictive_Cardiomyopathy = `Diagnostic_Code.Restrictive Cardiomyopathy`,
-    Valvular_HD = `Diagnostic_Code.Valvular Heart Disease`
+    CHD_Surg = `Diag_Code.Congenital Heart Disease With Surgery`,
+    CHD_NoSurg = `Diag_Code.Congenital Heart Disease Without Surgery`,
+    DCM = `Diag_Code.Dilated Cardiomyopathy`,
+    HCM = `Diag_Code.Hypertrophic Cardiomyopathy`,
+    Myocard = Diag_Code.Myocarditis,
+    Other_Diag = Diag_Code.Other,
+    RCM = `Diag_Code.Restrictive Cardiomyopathy`,
+    VHD = `Diag_Code.Valvular Heart Disease`
   ) 
 
 # Replace any spaces or dots in column names with underscores
@@ -682,15 +726,15 @@ str(one_hot_hybrid_test)
 ```{r}
 
 one_hot_hybrid_test %<>%
-  rename(
-    Congenital_HD_Surgery = `Diagnostic_Code.Congenital Heart Disease With Surgery`,
-    Congenital_HD_No_Surgery = `Diagnostic_Code.Congenital Heart Disease Without Surgery`,
-    Dilated_Cardiomyopathy = `Diagnostic_Code.Dilated Cardiomyopathy`,
-    Hypertrophic_Cardiomyopathy = `Diagnostic_Code.Hypertrophic Cardiomyopathy`,
-    Myocarditis = Diagnostic_Code.Myocarditis,
-    Other_Diagnosis = Diagnostic_Code.Other,
-    Restrictive_Cardiomyopathy = `Diagnostic_Code.Restrictive Cardiomyopathy`,
-    Valvular_HD = `Diagnostic_Code.Valvular Heart Disease`
+ rename(
+    CHD_Surg = `Diag_Code.Congenital Heart Disease With Surgery`,
+    CHD_NoSurg = `Diag_Code.Congenital Heart Disease Without Surgery`,
+    DCM = `Diag_Code.Dilated Cardiomyopathy`,
+    HCM = `Diag_Code.Hypertrophic Cardiomyopathy`,
+    Myocard = Diag_Code.Myocarditis,
+    Other_Diag = Diag_Code.Other,
+    RCM = `Diag_Code.Restrictive Cardiomyopathy`,
+    VHD = `Diag_Code.Valvular Heart Disease`
   ) 
 
 # Replace any spaces or dots in column names with underscores
@@ -762,41 +806,33 @@ hybrid_cat_index = get_categorical_indexes(hybrid_X_train)
 #| warning: false
 #| message: false
 
+
 import pandas as pd
+import numpy as np
 
-# Convert NaN values to a string in categorical columns
-categorical_columns = [col for col in hybrid_X_train.columns if hybrid_X_train[col].dtype == 'object']
-hybrid_X_train[categorical_columns] = hybrid_X_train[categorical_columns].fillna('missing')
+# Function to clean invalid values in both numeric and categorical columns
+def clean_invalid_values(df):
+    for col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            # For numeric columns, replace inf with NaN, then replace NaN with 0
+            df[col] = df[col].replace([np.inf, -np.inf], np.nan)  # Replace inf values with NaN
+            df[col] = df[col].fillna(0)  # Replace NaN with 0
+        else:
+            # For categorical columns, replace NaN with 'Missing'
+            if isinstance(df[col].dtype, pd.CategoricalDtype):
+                # Add 'Missing' as a new category if it's not already in the categories
+                df[col] = df[col].cat.add_categories(['Missing']).fillna('Missing')
+            else:
+                # If it's not categorical yet, just replace NaN with 'Missing'
+                df[col] = df[col].fillna('Missing')
+            print(f"Processed non-numeric column: {col}")
+    return df
 
 
-# Convert NaN values to a string in categorical columns
-categorical_columns = [col for col in hybrid_X_test.columns if hybrid_X_test[col].dtype == 'object']
-hybrid_X_test[categorical_columns] = hybrid_X_test[categorical_columns].fillna('missing')
+# Clean hybrid_X_train and hybrid_X_test by replacing invalid values with zero or 'Missing'
+hybrid_X_train_cleaned = clean_invalid_values(pd.DataFrame(hybrid_X_train))
+hybrid_X_test_cleaned = clean_invalid_values(pd.DataFrame(hybrid_X_test))
 
-```
-
--   Data Cleansing for Missing Values
-
-```{python}
-#| echo: false
-#| warning: false
-#| message: false
-
-# NaN values in the column at index 10
-has_nan = hybrid_X_train.iloc[:, 10].isna().any()
-print("Column at index 10 contains NaN values:", has_nan)
-
-```
-```{python}
-#| echo: false
-#| warning: false
-#| message: false
-
-if 'Missing' not in hybrid_X_train.iloc[:, 10].cat.categories:
-    hybrid_X_train.iloc[:, 10] = hybrid_X_train.iloc[:, 10].cat.add_categories(['Missing'])
-
-# Replace NaN values in the column at index 10 with "Missing"
-hybrid_X_train.iloc[:, 10] = hybrid_X_train.iloc[:, 10].fillna('Missing')
 
 ```
 
@@ -853,16 +889,16 @@ for key, value in study.best_trial.params.items():
 
 #### Model
 
--   From Optuna Trial #32/50 with value: 0.741
+-   From Optuna Trial #43/50 with value: 0.738
 
 ```{python optuna-params3}
 
 model_params_hybrid = {
-    'learning_rate': 0.14,
-    'depth': 2,
-    'colsample_bylevel': 0.3424,
-    'min_data_in_leaf': 75,
-    'l2_leaf_reg': 5.142
+    'learning_rate': 0.07,
+    'depth': 4,
+    'colsample_bylevel': 0.11,
+    'min_data_in_leaf': 82,
+    'l2_leaf_reg': 7.03
 }
     
 ```
@@ -877,7 +913,7 @@ model_params_hybrid = {
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier, Pool
 
-cat_indexes = get_categorical_indexes(hybrid_X_train)
+cat_indexes = get_categorical_indexes(hybrid_X_train_cleaned)
 
 hybrid_model = CatBoostClassifier(
                                objective='Logloss',
@@ -893,8 +929,8 @@ hybrid_model = CatBoostClassifier(
                                
 
 # Create a Pool object for the training and testing data
-train_pool = Pool(hybrid_X_train, cat_features=cat_indexes, label=hybrid_Y_train)
-test_pool = Pool(hybrid_X_test, cat_features=cat_indexes, label=hybrid_Y_test)
+train_pool = Pool(hybrid_X_train_cleaned, cat_features=cat_indexes, label=hybrid_Y_train)
+test_pool = Pool(hybrid_X_test_cleaned, cat_features=cat_indexes, label=hybrid_Y_test)
 
 hybrid_model.fit(train_pool, eval_set=test_pool)
 
@@ -1075,6 +1111,31 @@ gain_table_ohe
 loss_table_ohe
 
 ```
+#### Interactions
+
+```{python}
+
+# Extract feature names from the training pool
+columns_feature = train_pool.get_feature_names()
+
+model_interactions = hybrid_model.get_feature_importance(data=train_pool, type="Interaction", prettified=True)
+
+# Added the feature names for ease of checking
+model_interactions["First Feature"] = model_interactions["First Feature Index"].apply(lambda x: columns_feature[x])
+model_interactions["Second Feature"] = model_interactions["Second Feature Index"].apply(lambda x: columns_feature[x])
+
+
+```
+
+```{r}
+model_interactions <- py$model_interactions
+
+model_interactions %<>% 
+  select(4,5,3)
+
+model_interactions
+```
+
 
 ### CatBoost Model Accuracy Summary
 
@@ -1116,24 +1177,31 @@ model_confusion_matrix
 import shap
 
 explainer = shap.TreeExplainer(hybrid_model)
-shap_values = explainer(hybrid_X_train)
-  
+shap_values = explainer(hybrid_X_train_cleaned)
+
 ```
 
 #### Beeswarm (Top Features - Categorical and Numerical)
 
 ```{python}
-#| eval: false
+#| eval: true
 #| echo: false
 #| message: false
 #| warning: false
 
 mean_abs_shap_values = np.mean(np.abs(shap_values.values), axis=0)
 
-top_n = 25
+top_n = 20
 top_indices = np.argsort(-mean_abs_shap_values)[:top_n]  # Indices of the top features
 
-filtered_shap_values = shap_values[:, top_indices]
+# filtered SHAP object with top N features
+filtered_shap_values = shap.Explanation(
+    shap_values.values[:, top_indices],
+    base_values=shap_values.base_values,
+    data=shap_values.data[:, top_indices],
+    feature_names=np.array(shap_values.feature_names)[top_indices]
+)
+
 
 ```
 
@@ -1149,10 +1217,8 @@ import shap
 
 plt.close()
 
-shap.initjs()
 
-
-shap.plots.beeswarm(filtered_shap_values,20)
+shap.plots.beeswarm(filtered_shap_values, max_display=top_n)
 
 plt.xlabel('', fontsize=8)
 plt.ylabel('', fontsize=8)
@@ -1208,19 +1274,19 @@ plt.close()
 
 
 # Get the list of all columns
-all_columns = hybrid_X_train.columns.tolist()
+all_columns = hybrid_X_train_cleaned.columns.tolist()
 
 # Function to check if a column is one-hot encoded
 def is_one_hot_encoded(column):
-    unique_values = hybrid_X_train[column].unique()
+    unique_values = hybrid_X_train_cleaned[column].unique()
     return set(unique_values).issubset({0, 1}) and len(unique_values) <= 2
 
 # Select numerical features that are not one-hot encoded
-num_features = [col for col in all_columns if hybrid_X_train[col].dtype in ['int64', 'float64'] and not is_one_hot_encoded(col)]
+num_features = [col for col in all_columns if hybrid_X_train_cleaned[col].dtype in ['int64', 'float64'] and not is_one_hot_encoded(col)]
 print("Numerical Features:", num_features)
 
 # Get the indices of numerical features
-num_feature_indices = [hybrid_X_train.columns.get_loc(col) for col in num_features]
+num_feature_indices = [hybrid_X_train_cleaned.columns.get_loc(col) for col in num_features]
 print("Indices of Numerical Features:", num_feature_indices)
 
 
@@ -1251,7 +1317,7 @@ plt.close()
 numerical_shap_values = shap_values[:, num_feature_indices]
 
 # Plot the beeswarm for only the numerical features
-shap.plots.beeswarm(numerical_shap_values,15)
+shap.plots.beeswarm(numerical_shap_values)
 
 plt.tight_layout()
 
@@ -1456,4 +1522,95 @@ plot
 
 ```
 
-#### Partial Dependence Plots
+### Partial Dependence Plots
+
+```{python}
+
+import numpy as np
+import shap
+import matplotlib.pyplot as plt
+import os
+import warnings
+
+# Ensure the directory exists for saving the plots
+output_dir = 'images/dependence_plots'
+os.makedirs(output_dir, exist_ok=True)
+
+# Extract SHAP values and input data
+shap_values_data = filtered_shap_values.values
+input_data = filtered_shap_values.data
+
+def filter_valid_indices(shap_values, input_data):
+    valid_rows = np.ones(len(shap_values), dtype=bool)  # Start with all True
+    
+    # Iterate over each feature (column)
+    for col_idx in range(input_data.shape[1]):
+        col_data = input_data[:, col_idx]
+        
+        # Only apply np.isnan() if the column is numeric
+        if pd.api.types.is_numeric_dtype(col_data):
+            valid_rows &= ~np.isnan(col_data) & ~np.isinf(col_data)
+    
+    # Apply similar filtering to SHAP values (since SHAP values are always numeric)
+    valid_rows &= ~np.isnan(shap_values).any(axis=1) & ~np.isinf(shap_values).any(axis=1)
+    
+    return np.where(valid_rows)
+
+# Filter valid rows
+valid_indices = filter_valid_indices(shap_values_data, input_data)
+
+# Create a new SHAP Explanation object with only valid rows
+filtered_shap_values_clean = shap.Explanation(
+    values=shap_values_data[valid_indices],
+    base_values=filtered_shap_values.base_values[valid_indices],
+    data=input_data[valid_indices],
+    feature_names=filtered_shap_values.feature_names
+)
+
+
+# Function to check if a feature is numeric
+def is_numeric_array(arr):
+    if isinstance(arr, np.ndarray):
+        return np.issubdtype(arr.dtype, np.number)
+    else:
+        return pd.api.types.is_numeric_dtype(arr)
+      
+
+# Suppress runtime warnings for cleaner output
+warnings.filterwarnings("error", category=RuntimeWarning)
+
+# Loop through features and create SHAP plots
+for feature in filtered_shap_values_clean.feature_names:
+    plt.close()
+    plt.figure()  # Create a new figure for each plot
+    
+    try:
+        # Get feature data
+        feature_data = filtered_shap_values_clean[:, feature].data
+        
+        # Check if the feature is numeric
+        if is_numeric_array(feature_data):
+            print(f"Processing scatter plot for numeric feature: {feature}")
+            shap.plots.scatter(filtered_shap_values_clean[:, feature])
+            plt.title(f"SHAP Scatter Plot for {feature}")
+            plt.tight_layout()
+            plt.savefig(f'{output_dir}/shap_scatter_{feature}.png', dpi=300)
+            plt.show()
+            plt.close()
+        else:
+            print(f"Processing bar plot for categorical feature: {feature}")
+            # For categorical features, use bar plot
+            shap.plots.bar(filtered_shap_values_clean[:, feature])
+            plt.title(f"SHAP Bar Plot for {feature} (Categorical)")
+            plt.tight_layout()
+            plt.savefig(f'{output_dir}/shap_bar_{feature}.png', dpi=300)
+            plt.show()
+            plt.close()
+
+    except RuntimeWarning as e:
+        print(f"RuntimeWarning for feature {feature}: {e}")
+    except Exception as e:
+        print(f"Error plotting feature {feature}: {e}")
+
+        
+```
