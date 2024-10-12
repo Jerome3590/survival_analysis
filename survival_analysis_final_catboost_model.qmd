@@ -14,7 +14,7 @@ format:
 ---
 
 ```{r load-libraries}
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 
@@ -44,9 +44,9 @@ library(digest)
 
 ```
 
-### Survival Model Dataset
+### Survival Model Dataset  {.hidden .unnumbered .unlisted}
 
-```{r}  
+```{r echo=FALSE}  
 
 hash_numeric_string_to_letters <- Vectorize(function(input_str) {
   # Ensure the input is a numeric string
@@ -76,7 +76,7 @@ hash_numeric_string_to_letters <- Vectorize(function(input_str) {
 ```
 
 ```{r load-dataset}
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 #| eval: true
@@ -87,15 +87,16 @@ survival_model <- read_rds(here("data","model_data_train.rds"))
 
 survival_model %<>%
   mutate(
-    List_Yr = as.factor(year(WL_DT)),
-    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0)
-  ) %>% 
+    List_Yr = year(WL_DT),
+    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0),
+    DIALYSIS_CAND = recode(DIALYSIS_CAND, "No" = -1, "Unknown" = 0, "Yes" = 1),
+    VAD_CAND_REG = recode(VAD_CAND_REG, "No" = -1, "Yes" = 1)) %>% 
   mutate(List_Ctr = hash_numeric_string_to_letters(as.character(LISTING_CTR_CODE))) %>%
   mutate_if(is.character, as.factor) 
 
 ```
 
-```{r}
+```{r echo=FALSE}
 
 survival_model %<>% 
   select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS, -LISTING_CTR_CODE)
@@ -113,14 +114,14 @@ survival_model %<>%
     Blood_Type = ABO,
     PGE_TCR = PGE_TCR,
     ECMO_Reg = ECMO_CAND_REG,
-    VAD_Reg = VAD_CAND_REG,
+    VAD_REg = VAD_CAND_REG,
     VAD_TCR = VAD_DEVICE_TY_TCR,
     Vent_Reg = VENTILATOR_CAND_REG,
     Status_Reg = FUNC_STAT_CAND_REG,
     WL_Oth_Org = WL_OTHER_ORG,
     Cereb_Vasc = CEREB_VASC,
-    Diabetes = DIAB,
     Dialysis = DIALYSIS_CAND,
+    Diabetes = DIAB,
     Defib = IMPL_DEFIBRIL,
     Inotrop = INOTROPES_TCR,
     Creatine = MOST_RCNT_CREAT,
@@ -132,8 +133,6 @@ survival_model %<>%
     Prop_Refusals = p_refusals,
     XMatch_Req = PRELIM_XMATCH_REQ
   )
-
-length(colnames(survival_model))
 
 ```
 
@@ -147,16 +146,16 @@ survival_model_test <- read_rds(here("data","model_data_test.rds"))
 
 survival_model_test %<>%
     mutate(
-    List_Yr = as.factor(year(WL_DT)),
-    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0)
-  ) %>% 
+    List_Yr = year(WL_DT),
+    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0),
+    DIALYSIS_CAND = recode(DIALYSIS_CAND, "No" = -1, "Unknown" = 0, "Yes" = 1),
+    VAD_CAND_REG = recode(VAD_CAND_REG, "No" = -1, "Yes" = 1)) %>% 
   mutate(List_Ctr = hash_numeric_string_to_letters(as.character(LISTING_CTR_CODE))) %>%
   mutate_if(is.character, as.factor) 
 
-
 ```
 
-```{r}
+```{r echo=FALSE}
 
 survival_model_test %<>% 
   select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS, -LISTING_CTR_CODE)
@@ -173,14 +172,14 @@ survival_model_test %<>%
     Blood_Type = ABO,
     PGE_TCR = PGE_TCR,
     ECMO_Reg = ECMO_CAND_REG,
-    VAD_Reg = VAD_CAND_REG,
+    VAD_REg = VAD_CAND_REG,
     VAD_TCR = VAD_DEVICE_TY_TCR,
     Vent_Reg = VENTILATOR_CAND_REG,
     Status_Reg = FUNC_STAT_CAND_REG,
     WL_Oth_Org = WL_OTHER_ORG,
     Cereb_Vasc = CEREB_VASC,
-    Diabetes = DIAB,
     Dialysis = DIALYSIS_CAND,
+    Diabetes = DIAB,
     Defib = IMPL_DEFIBRIL,
     Inotrop = INOTROPES_TCR,
     Creatine = MOST_RCNT_CREAT,
@@ -193,27 +192,21 @@ survival_model_test %<>%
     XMatch_Req = PRELIM_XMATCH_REQ
   )
 
-length(colnames(survival_model))
-
 ```
 
-```{r}
+```{r echo=FALSE}
 
 cat_features_train <- names(survival_model)[sapply(survival_model, is.factor)]
 
-cat_features_train
-
 ```
 
-```{r}
+```{r echo=FALSE}
 
 cat_features_test <- names(survival_model_test)[sapply(survival_model_test, is.factor)]
 
-cat_features_test
-
 ```
 
-#### Utility Function for Categorical Indexes
+#### Utility Function for Categorical Indexes  {.hidden .unnumbered .unlisted}
 
 ```{python}
 #| echo: false
@@ -267,7 +260,7 @@ test_Y <- survival_model_test$outcome
 
 ```
 
-```{python catboost-r-data}
+```{python catboost-r-data, echo=FALSE}
 
 #| echo: false
 #| warning: false
@@ -287,9 +280,9 @@ Y_test = np.array(y_test)
 cat_index = get_categorical_indexes(X_train)
 cat_index2 = get_categorical_indexes(X_test)
 
-cat_index == cat_index2
-
 ```
+
+#### Data Cleansing  {.hidden .unnumbered .unlisted}
 
 ```{python}
 #| echo: false
@@ -309,8 +302,6 @@ X_test[categorical_columns] = X_test[categorical_columns].fillna('missing')
 
 ```
 
--   Data Cleansing for Missing Values
-
 ```{python}
 #| echo: false
 #| warning: false
@@ -329,17 +320,22 @@ print("Column at index 11 contains NaN values:", has_nan)
 #| warning: false
 #| message: false
 
+# Ensure the column at index 11 is categorical and "Missing" is added to categories
 if 'Missing' not in X_train.iloc[:, 11].cat.categories:
     X_train.iloc[:, 11] = X_train.iloc[:, 11].cat.add_categories(['Missing'])
 
-# Replace NaN values in the column at index 15 with "Missing"
+# Explicitly cast the column to a category type to ensure compatibility
+X_train.iloc[:, 11] = X_train.iloc[:, 11].astype('category')
+
+# Replace NaN values with the "Missing" category
 X_train.iloc[:, 11] = X_train.iloc[:, 11].fillna('Missing')
+
 
 ```
 
-#### Optuna Hyperparameter Optimization
+#### Optuna Hyperparameter Optimization 
 
-```{python optuna-native-model, eval=FALSE}
+```{python optuna-native-model, eval=FALSE, echo=FALSE}
 
 #| eval: false
 #| echo: false
@@ -394,11 +390,11 @@ for key, value in study.best_trial.params.items():
 ```{python optuna-params1}
 
 model_params_native = {
-    'learning_rate': 0.06,
-    'depth': 8,
-    'colsample_bylevel': 0.32,
-    'min_data_in_leaf': 7,
-    'l2_leaf_reg': 4.9
+    'learning_rate': 0.05,
+    'depth': 4,
+    'colsample_bylevel': 0.89,
+    'min_data_in_leaf': 9,
+    'l2_leaf_reg': 9.9
 }
     
 ```
@@ -408,7 +404,7 @@ model_params_native = {
 ```{python catboost-model-auc}
 
 #| eval: true
-#| echo: true
+#| echo: false
 #| message: false
 #| warning: false
 
@@ -441,7 +437,7 @@ model_auc.fit(train_pool, eval_set=test_pool)
 
 #### Calibration Plot
 
-```{python}
+```{python echo=FALSE}
 
 import pandas as pd
 
@@ -463,7 +459,7 @@ predictions = pd.DataFrame({
 ```
 
 
-```{r}
+```{r echo=FALSE}
 
 predictions <- py$predictions %>% 
   mutate(Class = ifelse(Actual == 0, "survive", "not_survive"),
@@ -481,9 +477,9 @@ predictions %>%
 
 ```
 
-#### Decision Threshold
+#### Decision Threshold  {.hidden .unnumbered .unlisted}
 
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, echo=FALSE}
 
 # Calculate the ROC curve
 roc_result <- roc(predictions$Actual, predictions$Prob_Positive_Class)
@@ -505,7 +501,7 @@ cat("Number of '1's predicted:", sum(predictions$predicted_classes), "\n")
 
 #### Calibrated Model Metrics
 
-```{python}
+```{python echo=FALSE}
 
 from sklearn.metrics import (
     roc_auc_score, 
@@ -575,62 +571,112 @@ print(catboost_metrics_native)
 
 ```
 
-#### Feature Importance
+#### Feature Importances
 
-```{python}
+```{python native-model-feature-importance, echo=FALSE}
 
-gain = model_auc.get_feature_importance(prettified=True)
-loss = model_auc.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
+import pandas as pd
+
+feature_names = model_auc.feature_names_
+
+# Calculate feature importances for all methods
+gain_feature_importance = model_auc.get_feature_importance(prettified=True)
+loss_feature_importance = model_auc.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
+prediction_value_feature_importance = model_auc.get_feature_importance(test_pool, type='PredictionValuesChange', prettified=True)
+shap_feature_importance = model_auc.get_feature_importance(test_pool, type='ShapValues', prettified=True)
+
+# SHAP returns values for each instance, sum them to get feature importance
+shap_feature_importance_df = pd.DataFrame(shap_feature_importance).sum(axis=0)
+shap_feature_importance_df = shap_feature_importance_df[:-1]  # Exclude the last row which is the base value
+# Direction column for SHAP based on positive/negative sign
+shap_direction = ['+' if val >= 0 else '-' for val in shap_feature_importance_df.values]
+
+# Create pandas dataframes for each method
+gain_df = pd.DataFrame(gain_feature_importance)
+loss_df = pd.DataFrame(loss_feature_importance)
+prediction_value_df = pd.DataFrame(prediction_value_feature_importance)
+shap_df = pd.DataFrame({
+    'Feature Id': feature_names,
+    'Importances': shap_feature_importance_df.values,
+    'SHAP_Direction': shap_direction  # direction of SHAP values
+})
+
+# Ensure that 'Feature Id' is the same data type in all DataFrames
+gain_df['Feature Id'] = gain_df['Feature Id'].astype(str)
+loss_df['Feature Id'] = loss_df['Feature Id'].astype(str)
+prediction_value_df['Feature Id'] = prediction_value_df['Feature Id'].astype(str)
+shap_df['Feature Id'] = shap_df['Feature Id'].astype(str)
+
+
+# Rename columns to prevent conflicts during merge
+gain_df.rename(columns={'Importances': 'Importance_Gain'}, inplace=True)
+loss_df.rename(columns={'Importances': 'Importance_Loss'}, inplace=True)
+prediction_value_df.rename(columns={'Importances': 'Importance_PredictionValue'}, inplace=True)
+shap_df.rename(columns={'Importances': 'Importance_SHAP'}, inplace=True)
+
+# Merge dataframes on 'Feature Id' for comparison
+comparison_df = gain_df.merge(loss_df[['Feature Id', 'Importance_Loss']], on='Feature Id')
+
+comparison_df = comparison_df.merge(prediction_value_df[['Feature Id', 'Importance_PredictionValue']], on='Feature Id')
+
+comparison_df = comparison_df.merge(shap_df[['Feature Id', 'Importance_SHAP', 'SHAP_Direction']], on='Feature Id')
+
+# Rank features based on each importance metric
+comparison_df['Rank_Gain'] = comparison_df['Importance_Gain'].rank(ascending=False)
+comparison_df['Rank_Loss'] = comparison_df['Importance_Loss'].rank(ascending=False)
+comparison_df['Rank_PredictionValue'] = comparison_df['Importance_PredictionValue'].rank(ascending=False)
+
+# Rank SHAP values by absolute value and create the rank column for SHAP
+comparison_df['Rank_SHAP'] = comparison_df['Importance_SHAP'].abs().rank(ascending=False)
+
+# Sort by PredictionValuesChange first, then LossFunctionChange, SHAP (absolute value), and finally Gain
+comparison_df = comparison_df.sort_values(
+    by=['Importance_PredictionValue', 'Importance_Loss', 'Importance_SHAP', 'Importance_Gain'], 
+    ascending=False
+)
 
 ```
 
-```{r catboost-native-feature-importance}
-#| echo: false
-#| layout-ncol: 1
-#| label: tbl-feature-importance-native
-#| tbl-cap: "CatBoost Feature Importance"
-#| tbl-subcap: 
-#|   - "Gain"
-#|   - "Loss Function Change"
-#| warning: false
-#| message: false
-#| eval: true
 
-gain_tbl1 <- py$gain
+```{r feature-importances-native-model}
 
-gain_table1 <- tibble( 'Feature ID' = gain_tbl1$`Feature Id`,
-                  'Importance' = gain_tbl1$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
+# Retrieve the ranked comparison dataframe from Python
+comparison_df <- py$comparison_df
 
-loss_tbl1 <- py$loss
+# Convert the pandas dataframe to an R tibble
+comparison_tbl <- as_tibble(comparison_df)
 
-loss_table1 <- tibble( 'Feature ID' = loss_tbl1$`Feature Id`,
-                  'Importance' = loss_tbl1$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
+# Create a formatted table using huxtable, including the ranks for each method and the 'Direction' column
+comparison_table <- comparison_tbl %>%
+  rowid_to_column(var = "Overall Rank") %>%
+  select('Overall Rank', 'Feature Id', 
+         'Importance_PredictionValue', 'Rank_PredictionValue',
+         'Importance_Gain', 'Rank_Gain',
+         'Importance_SHAP', 'SHAP_Direction', 'Rank_SHAP',
+         'Importance_Loss', 'Rank_Loss') 
 
-
-gain_table1
-loss_table1
+comparison_table %>% 
+  DT::datatable(
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(
+        list(className = 'dt-center', targets = "_all")
+      )
+    )
+  )
 
 ```
 
-### CatBoost with One Hot Encoding For Key Variables - Hybrid Model
+
+### CatBoost - One Hot Encoding (Hybrid)
 
 - Train
 
-```{r}
+```{r echo=FALSE}
 one_hot_hybrid <- survival_model
 ```
 
-```{r}
+```{r echo=FALSE}
 
 cat_features <- names(one_hot_hybrid)[sapply(one_hot_hybrid, is.factor)]
 
@@ -638,13 +684,13 @@ cat_features
 
 ```
 
-```{r}
-hybrid_cat <- cat_features[c(2,12)]
+```{r echo=FALSE}
+hybrid_cat <- cat_features[c(2,3,10)]
 
 hybrid_cat
 ```
 
-```{r}
+```{r echo=FALSE}
 
 # Create the dummy variables specification
 dummies <- dummyVars(~ ., data = one_hot_hybrid[, hybrid_cat], fullRank = FALSE)
@@ -656,13 +702,12 @@ df_dummies <- predict(dummies, newdata = one_hot_hybrid)
 one_hot_hybrid <- cbind(one_hot_hybrid[, !(names(one_hot_hybrid) %in% hybrid_cat)], df_dummies)
 
 # Review the structure of the updated dataframe
-str(one_hot_hybrid)
+#str(one_hot_hybrid)
 
 ```
 
 
-```{r}
-
+```{r echo=FALSE}
 
 one_hot_hybrid %<>%
   rename(
@@ -680,33 +725,33 @@ one_hot_hybrid %<>%
 names(one_hot_hybrid) <- gsub("[ .]", "_", names(one_hot_hybrid))
 
 # Review the structure of the updated dataframe
-str(one_hot_hybrid)
+#str(one_hot_hybrid)
 
 ```
 
 - Test
 
-```{r}
+```{r echo=FALSE}
 one_hot_hybrid_test <- survival_model_test
 ```
 
-```{r}
+```{r echo=FALSE}
 
 cat_features <- names(one_hot_hybrid_test)[sapply(one_hot_hybrid_test, is.factor)]
 
-cat_features
+#cat_features
 
 ```
 
-```{r}
+```{r echo=FALSE}
 
-hybrid_cat <- cat_features[c(2,12)]
+hybrid_cat <- cat_features[c(2,3,10)]
 
-hybrid_cat
+#hybrid_cat
 
 ```
 
-```{r}
+```{r echo=FALSE}
 
 # Create the dummy variables specification
 dummies <- dummyVars(~ ., data = one_hot_hybrid_test[, hybrid_cat], fullRank = FALSE)
@@ -718,12 +763,12 @@ df_dummies <- predict(dummies, newdata = one_hot_hybrid_test)
 one_hot_hybrid_test <- cbind(one_hot_hybrid_test[, !(names(one_hot_hybrid_test) %in% hybrid_cat)], df_dummies)
 
 # Review the structure of the updated dataframe
-str(one_hot_hybrid_test)
+#str(one_hot_hybrid_test)
 
 
 ```
 
-```{r}
+```{r echo=FALSE}
 
 one_hot_hybrid_test %<>%
  rename(
@@ -741,11 +786,59 @@ one_hot_hybrid_test %<>%
 names(one_hot_hybrid_test) <- gsub("[ .]", "_", names(one_hot_hybrid_test))
 
 # Review the structure of the updated dataframe
-str(one_hot_hybrid_test)
+#str(one_hot_hybrid_test)
 
 ```
 
-### Hybrid OHE CatBoost Model
+### Hybrid CatBoost Model
+
+```{r echo=FALSE, eval=FALSE}
+# Sort the column names alphabetically for both training and test datasets
+train_columns_sorted <- sort(colnames(one_hot_hybrid))
+test_columns_sorted <- sort(colnames(one_hot_hybrid_test))
+
+# Check if the sorted column names match between training and test datasets
+if (identical(train_columns_sorted, test_columns_sorted)) {
+  print("Feature names match between the training and test datasets.")
+} else {
+  print("Feature names do not match between the training and test datasets.")
+  
+  # Find columns that are in the training set but not in the test set
+  train_only <- setdiff(train_columns_sorted, test_columns_sorted)
+  
+  # Find columns that are in the test set but not in the training set
+  test_only <- setdiff(test_columns_sorted, train_columns_sorted)
+  
+  print(paste("Columns in training but not in test:", toString(train_only)))
+  print(paste("Columns in test but not in training:", toString(test_only)))
+}
+
+```
+
+
+```{r echo=FALSE}
+
+# Get all unique columns from both training and test datasets
+all_columns <- union(colnames(one_hot_hybrid), colnames(one_hot_hybrid_test))
+
+# Add missing columns to the training set (with all values set to 0)
+missing_in_train <- setdiff(all_columns, colnames(one_hot_hybrid))
+for (col in missing_in_train) {
+  one_hot_hybrid[[col]] <- 0  # Add missing columns with all 0s
+}
+
+# Add missing columns to the test set (with all values set to 0)
+missing_in_test <- setdiff(all_columns, colnames(one_hot_hybrid_test))
+for (col in missing_in_test) {
+  one_hot_hybrid_test[[col]] <- 0  # Add missing columns with all 0s
+}
+
+# Reorder columns alphabetically to ensure they match
+one_hot_hybrid <- one_hot_hybrid[, sort(colnames(one_hot_hybrid))]
+one_hot_hybrid_test <- one_hot_hybrid_test[, sort(colnames(one_hot_hybrid_test))]
+
+```
+
 
 ```{r}
 #| echo: false
@@ -801,44 +894,76 @@ hybrid_cat_index = get_categorical_indexes(hybrid_X_train)
 
 ```
 
+```{python echo=FALSE}
+
+# Compare feature names in training and test datasets
+train_columns = hybrid_X_train.columns
+test_columns = hybrid_X_test.columns
+
+# Check for differences
+differences = set(train_columns) ^ set(test_columns)  # Symmetric difference
+
+if differences:
+    print("Differences in columns between train and test datasets:", differences)
+else:
+    print("Feature names are consistent between training and test datasets.")
+
+```
+
+#### Data Cleansing  {.hidden .unnumbered .unlisted}
+
 ```{python}
 #| echo: false
 #| warning: false
 #| message: false
 
-
 import pandas as pd
-import numpy as np
 
-# Function to clean invalid values in both numeric and categorical columns
-def clean_invalid_values(df):
-    for col in df.columns:
-        if pd.api.types.is_numeric_dtype(df[col]):
-            # For numeric columns, replace inf with NaN, then replace NaN with 0
-            df[col] = df[col].replace([np.inf, -np.inf], np.nan)  # Replace inf values with NaN
-            df[col] = df[col].fillna(0)  # Replace NaN with 0
-        else:
-            # For categorical columns, replace NaN with 'Missing'
-            if isinstance(df[col].dtype, pd.CategoricalDtype):
-                # Add 'Missing' as a new category if it's not already in the categories
-                df[col] = df[col].cat.add_categories(['Missing']).fillna('Missing')
-            else:
-                # If it's not categorical yet, just replace NaN with 'Missing'
-                df[col] = df[col].fillna('Missing')
-            print(f"Processed non-numeric column: {col}")
-    return df
+# Convert NaN values to a string in categorical columns
+categorical_columns = [col for col in hybrid_X_train.columns if hybrid_X_train[col].dtype == 'object']
+hybrid_X_train[categorical_columns] = hybrid_X_train[categorical_columns].fillna('missing')
 
 
-# Clean hybrid_X_train and hybrid_X_test by replacing invalid values with zero or 'Missing'
-hybrid_X_train_cleaned = clean_invalid_values(pd.DataFrame(hybrid_X_train))
-hybrid_X_test_cleaned = clean_invalid_values(pd.DataFrame(hybrid_X_test))
+# Convert NaN values to a string in categorical columns
+categorical_columns = [col for col in hybrid_X_test.columns if hybrid_X_test[col].dtype == 'object']
+hybrid_X_test[categorical_columns] = hybrid_X_test[categorical_columns].fillna('missing')
+
+```
+
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# NaN values in the column at index 131
+has_nan = hybrid_X_train.iloc[:, 39].isna().any()
+print("Column at index 39 contains NaN values:", has_nan)
+
+```
+ 
+ 
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Ensure the column at index 131 is categorical and "Missing" is added to categories
+if 'Missing' not in hybrid_X_train.iloc[:, 39].cat.categories:
+    hybrid_X_train.iloc[:, 39] = hybrid_X_train.iloc[:, 39].cat.add_categories(['Missing'])
+
+# Explicitly cast the column to a category type to ensure compatibility
+hybrid_X_train.iloc[:, 39] = hybrid_X_train.iloc[:, 39].astype('category')
+
+# Replace NaN values with the "Missing" category
+hybrid_X_train.iloc[:, 39] = hybrid_X_train.iloc[:, 39].fillna('Missing')
 
 
 ```
 
 #### Optuna Hyperparameter Optimization
 
-```{python optuna-one-hot-hybrid, eval=FALSE}
+```{python optuna-one-hot-hybrid, eval=FALSE, echo=FALSE}
 
 #| eval: false
 #| echo: false
@@ -889,21 +1014,21 @@ for key, value in study.best_trial.params.items():
 
 #### Model
 
--   From Optuna Trial #43/50 with value: 0.738
+-   From Optuna Trial #40/50 with value: 0.74
 
 ```{python optuna-params3}
 
 model_params_hybrid = {
-    'learning_rate': 0.07,
-    'depth': 4,
+    'learning_rate': 0.06,
+    'depth': 3,
     'colsample_bylevel': 0.11,
-    'min_data_in_leaf': 82,
-    'l2_leaf_reg': 7.03
+    'min_data_in_leaf': 24,
+    'l2_leaf_reg': 8.4
 }
     
 ```
 
-```{python catboost-model-one-hot-hybrid}
+```{python catboost-model-one-hot-hybrid, echo=FALSE}
 
 #| eval: true
 #| echo: true
@@ -913,7 +1038,7 @@ model_params_hybrid = {
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier, Pool
 
-cat_indexes = get_categorical_indexes(hybrid_X_train_cleaned)
+cat_indexes = get_categorical_indexes(hybrid_X_train)
 
 hybrid_model = CatBoostClassifier(
                                objective='Logloss',
@@ -929,15 +1054,13 @@ hybrid_model = CatBoostClassifier(
                                
 
 # Create a Pool object for the training and testing data
-train_pool = Pool(hybrid_X_train_cleaned, cat_features=cat_indexes, label=hybrid_Y_train)
-test_pool = Pool(hybrid_X_test_cleaned, cat_features=cat_indexes, label=hybrid_Y_test)
+train_pool = Pool(hybrid_X_train, cat_features=cat_indexes, label=hybrid_Y_train)
+test_pool = Pool(hybrid_X_test, cat_features=cat_indexes, label=hybrid_Y_test)
 
 hybrid_model.fit(train_pool, eval_set=test_pool)
 
-gain_hybrid = hybrid_model.get_feature_importance(prettified=True)
-loss_hybrid = hybrid_model.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
-
 ```
+
 #### Calibration Plot
 
 ```{python}
@@ -980,9 +1103,9 @@ hybrid_predictions %>%
 
 ```
 
-#### Decision Threshold
+#### Decision Threshold  {.hidden .unnumbered .unlisted}
 
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, echo=FALSE}
 
 # Calculate the ROC curve
 hybrid_roc_result <- roc(hybrid_predictions$Actual, hybrid_predictions$Prob_Positive_Class)
@@ -1001,9 +1124,10 @@ cat("Optimal Threshold:", hybrid_optimal_threshold, "\n")
 cat("Number of '1's predicted:", sum(hybrid_predictions$predicted_classes), "\n")
 
 ```
+
 #### Calibrated Model Metrics
 
-```{python}
+```{python model-metrics, echo=FALSE}
 
 from sklearn.metrics import (
     roc_auc_score, 
@@ -1073,69 +1197,100 @@ print(catboost_metrics_hybrid)
 
 ```
 
-#### Final Feature Importance: One Hot Hybrid Model
+#### Final Feature Importances
 
-```{r feature-importance-one-hot}
-#| echo: false
-#| layout-ncol: 1
-#| label: tbl-feature-importance-one-hot
-#| tbl-cap: "CatBoost Feature Importance with Hybrid One-Hot Encoding"
-#| tbl-subcap: 
-#|   - "Gain"
-#|   - "Loss Function Change"
-#| warning: false
-#| message: false
-#| eval: true
+```{python hybrid-model-feature-importance, echo=FALSE}
+import pandas as pd
 
-gain_tbl_ohe <- py$gain_hybrid
-loss_tbl_ohe <- py$loss_hybrid
+feature_names = hybrid_model.feature_names_
 
-gain_table_ohe <- tibble( 'Feature ID' = gain_tbl_ohe$`Feature Id`,
-                  'Importance' = gain_tbl_ohe$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
+# Calculate feature importances for all methods
+gain_feature_importance = hybrid_model.get_feature_importance(prettified=True)
+loss_feature_importance = hybrid_model.get_feature_importance(test_pool, type='LossFunctionChange', prettified=True)
+prediction_value_feature_importance = hybrid_model.get_feature_importance(test_pool, type='PredictionValuesChange', prettified=True)
+shap_feature_importance = hybrid_model.get_feature_importance(test_pool, type='ShapValues', prettified=True)
+
+# SHAP returns values for each instance, sum them to get feature importance
+shap_feature_importance_df = pd.DataFrame(shap_feature_importance).sum(axis=0)
+shap_feature_importance_df = shap_feature_importance_df[:-1]  # Exclude the last row which is the base value
+# Direction column for SHAP based on positive/negative sign
+shap_direction = ['+' if val >= 0 else '-' for val in shap_feature_importance_df.values]
+
+# Create pandas dataframes for each method
+gain_df = pd.DataFrame(gain_feature_importance)
+loss_df = pd.DataFrame(loss_feature_importance)
+prediction_value_df = pd.DataFrame(prediction_value_feature_importance)
+shap_df = pd.DataFrame({
+    'Feature Id': feature_names,
+    'Importances': abs(shap_feature_importance_df.values),
+    'SHAP_Direction': shap_direction  # direction of SHAP values
+})
+
+# Ensure that 'Feature Id' is the same data type in all DataFrames
+gain_df['Feature Id'] = gain_df['Feature Id'].astype(str)
+loss_df['Feature Id'] = loss_df['Feature Id'].astype(str)
+prediction_value_df['Feature Id'] = prediction_value_df['Feature Id'].astype(str)
+shap_df['Feature Id'] = shap_df['Feature Id'].astype(str)
 
 
-loss_table_ohe <- tibble( 'Feature ID' = loss_tbl_ohe$`Feature Id`,
-                  'Importance' = loss_tbl_ohe$Importances) %>% 
-  rowid_to_column(var = "Rank") %>% 
-  as_hux() %>%
-  theme_article() %>% 
-  set_align(col=c('Rank','Importance'), value= "center") %>% 
-  set_tb_padding(2)
+# Rename columns to prevent conflicts during merge
+gain_df.rename(columns={'Importances': 'Importance_Gain'}, inplace=True)
+loss_df.rename(columns={'Importances': 'Importance_Loss'}, inplace=True)
+prediction_value_df.rename(columns={'Importances': 'Importance_PredictionValue'}, inplace=True)
+shap_df.rename(columns={'Importances': 'Importance_SHAP'}, inplace=True)
 
-gain_table_ohe
-loss_table_ohe
+# Merge dataframes on 'Feature Id' for comparison
+comparison_df = gain_df.merge(loss_df[['Feature Id', 'Importance_Loss']], on='Feature Id')
+
+comparison_df = comparison_df.merge(prediction_value_df[['Feature Id', 'Importance_PredictionValue']], on='Feature Id')
+
+comparison_df = comparison_df.merge(shap_df[['Feature Id', 'Importance_SHAP', 'SHAP_Direction']], on='Feature Id')
+
+# Rank features based on each importance metric
+comparison_df['Rank_Gain'] = comparison_df['Importance_Gain'].rank(ascending=False)
+comparison_df['Rank_Loss'] = comparison_df['Importance_Loss'].rank(ascending=False)
+comparison_df['Rank_PredictionValue'] = comparison_df['Importance_PredictionValue'].rank(ascending=False)
+
+# Rank SHAP values by absolute value and create the rank column for SHAP
+comparison_df['Rank_SHAP'] = comparison_df['Importance_SHAP'].abs().rank(ascending=False)
+
+# Sort by PredictionValuesChange first, then LossFunctionChange, SHAP (absolute value), and finally Gain
+comparison_df = comparison_df.sort_values(
+    by=['Importance_PredictionValue', 'Importance_Loss', 'Importance_SHAP', 'Importance_Gain'], 
+    ascending=False
+)
 
 ```
-#### Interactions
 
-```{python}
 
-# Extract feature names from the training pool
-columns_feature = train_pool.get_feature_names()
+```{r final-feature-importances, echo=FALSE}
 
-model_interactions = hybrid_model.get_feature_importance(data=train_pool, type="Interaction", prettified=True)
+# Retrieve the ranked comparison dataframe from Python
+comparison_df <- py$comparison_df
 
-# Added the feature names for ease of checking
-model_interactions["First Feature"] = model_interactions["First Feature Index"].apply(lambda x: columns_feature[x])
-model_interactions["Second Feature"] = model_interactions["Second Feature Index"].apply(lambda x: columns_feature[x])
+# Convert the pandas dataframe to an R tibble
+comparison_tbl <- as_tibble(comparison_df)
 
+# Create a formatted table using huxtable, including the ranks for each method and the 'Direction' column
+comparison_table_final <- comparison_tbl %>%
+  rowid_to_column(var = "Overall Rank") %>%
+  select('Overall Rank', 'Feature Id', 
+         'Importance_PredictionValue', 'Rank_PredictionValue',
+         'Importance_Gain', 'Rank_Gain',
+         'Importance_SHAP', 'SHAP_Direction', 'Rank_SHAP',
+         'Importance_Loss', 'Rank_Loss') 
+
+comparison_table_final %>% 
+  DT::datatable(
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(
+        list(className = 'dt-center', targets = "_all")
+      )
+    )
+  )
 
 ```
-
-```{r}
-model_interactions <- py$model_interactions
-
-model_interactions %<>% 
-  select(4,5,3)
-
-model_interactions
-```
-
 
 ### CatBoost Model Accuracy Summary
 
@@ -1163,9 +1318,7 @@ model_accuracy
 model_confusion_matrix
 ```
 
-
-
-### SHAP Value Analysis for Hybrid Model - Slight loss in accuracy but more explainable to the feature level and higher Recall.
+### SHAP Value Analysis
 
 ```{python shap-setup}
 
@@ -1177,11 +1330,38 @@ model_confusion_matrix
 import shap
 
 explainer = shap.TreeExplainer(hybrid_model)
-shap_values = explainer(hybrid_X_train_cleaned)
+
+shap_values = explainer(hybrid_X_train)
 
 ```
 
 #### Beeswarm (Top Features - Categorical and Numerical)
+
+```{python, echo=FALSE, eval=FALSE}
+#| eval: false
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-shap-beeswarm-chart
+#| fig-cap: 
+#|   - "Beeswarm Summary Results"
+
+
+import matplotlib.pyplot as plt
+import shap
+
+plt.close()
+shap.initjs()
+shap.summary_plot(shap_values, hybrid_X_train, max_display=19)
+plt.tight_layout()
+plt.savefig('images/catboost_beeswarm.png', dpi=1200)
+plt.close()
+
+```
+
+![Beeswarm Chart](images/catboost_beeswarm.png){#fig-shap-beeswarm-chart}
+
+#### Bar Chart for Feature Importance
 
 ```{python}
 #| eval: true
@@ -1191,7 +1371,7 @@ shap_values = explainer(hybrid_X_train_cleaned)
 
 mean_abs_shap_values = np.mean(np.abs(shap_values.values), axis=0)
 
-top_n = 20
+top_n = 19
 top_indices = np.argsort(-mean_abs_shap_values)[:top_n]  # Indices of the top features
 
 # filtered SHAP object with top N features
@@ -1205,43 +1385,12 @@ filtered_shap_values = shap.Explanation(
 
 ```
 
-```{python shap-beeswarm}
-#| eval: false
-#| echo: false
-#| message: false
-#| warning: false
-
-
-import matplotlib.pyplot as plt
-import shap
-
-plt.close()
-
-
-shap.plots.beeswarm(filtered_shap_values, max_display=top_n)
-
-plt.xlabel('', fontsize=8)
-plt.ylabel('', fontsize=8)
-plt.title('', fontsize=8)
-plt.tight_layout()
-
-plt.savefig('images/shapley_beeswarm.png', dpi=1200)
-
-plt.close()
-
-
-```
-
-![Beeswarm Chart](images/shapley_beeswarm.png){#fig-shap-beeswarm-chart}
-
-#### Bar Chart for Feature Importance
-
 ```{python shapley-bar-chart}
 #| eval: false
 #| echo: false
 #| warning: false
 #| message: false
-#| label: fig-net-effect
+#| label: fig-shap-bar-chart
 #| fig-cap: 
 #|   - "Net Effect"
 
@@ -1252,7 +1401,7 @@ plt.close()
 
 shap.initjs()
 
-shap.plots.bar(filtered_shap_values, max_display=20)
+shap.plots.bar(filtered_shap_values, max_display=19)
 
 plt.tight_layout()
 
@@ -1266,6 +1415,8 @@ plt.close()
 
 ![Feature Importance Chart](images/shapley_bar_one_hot.png){#fig-shap-bar-chart}
 
+#### Beeswarm Top Numerical Features
+
 ```{python}
 #| eval: true
 #| echo: false
@@ -1274,25 +1425,24 @@ plt.close()
 
 
 # Get the list of all columns
-all_columns = hybrid_X_train_cleaned.columns.tolist()
+all_columns = hybrid_X_train.columns.tolist()
 
 # Function to check if a column is one-hot encoded
 def is_one_hot_encoded(column):
-    unique_values = hybrid_X_train_cleaned[column].unique()
+    unique_values = hybrid_X_train[column].unique()
     return set(unique_values).issubset({0, 1}) and len(unique_values) <= 2
 
 # Select numerical features that are not one-hot encoded
-num_features = [col for col in all_columns if hybrid_X_train_cleaned[col].dtype in ['int64', 'float64'] and not is_one_hot_encoded(col)]
-print("Numerical Features:", num_features)
+num_features = [col for col in all_columns if hybrid_X_train[col].dtype in ['int64', 'float64'] and not is_one_hot_encoded(col)]
+#print("Numerical Features:", num_features)
 
 # Get the indices of numerical features
-num_feature_indices = [hybrid_X_train_cleaned.columns.get_loc(col) for col in num_features]
-print("Indices of Numerical Features:", num_feature_indices)
+num_feature_indices = [hybrid_X_train.columns.get_loc(col) for col in num_features]
+#print("Indices of Numerical Features:", num_feature_indices)
 
 
 ```
 
-#### Beeswarm Top Numerical Features
 
 ```{python beeswarm-numerical-features}
 #| eval: false
@@ -1317,7 +1467,7 @@ plt.close()
 numerical_shap_values = shap_values[:, num_feature_indices]
 
 # Plot the beeswarm for only the numerical features
-shap.plots.beeswarm(numerical_shap_values)
+shap.plots.beeswarm(numerical_shap_values, max_display=20)
 
 plt.tight_layout()
 
@@ -1399,7 +1549,7 @@ mean_abs_shap_values <- colMeans(abs(shap_df))  # Compute mean absolute SHAP val
 ```
 
 ```{r radar-chart}
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 #| eval: true
@@ -1447,7 +1597,7 @@ Low values for Median \# Refusals and low values for Median Wait Days - pushes p
 This visualization represents the positive and negative values for the 'Positive' Class ('1'). For situations that are based on both clasess (ie. One hot encoded values where SHAP value refers to the presence or absence of value) a Beeswarm chart is more appropriate. (See Dilated Cardiomyopathy for example - high positive SHAP value for absence of feature)
 
 ```{r pos-neg-shap-values}
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 #| eval: true
@@ -1471,7 +1621,7 @@ negative_shap_values <- abs(negative_shap_values)
 ```
 
 ```{r radar-chart-positive-negative}
-#| echo: true
+#| echo: false
 #| warning: false
 #| message: false
 #| eval: true
@@ -1514,7 +1664,7 @@ generate_radar_plot_pos_neg <- function(threshold) {
 }
 
 # Define a threshold for SHAP value significance
-threshold <- 0.025
+threshold <- 0.00
 
 # Generate and print the plot
 plot <- generate_radar_plot_pos_neg(threshold)
@@ -1522,14 +1672,17 @@ plot
 
 ```
 
-### Partial Dependence Plots
+### SHAP Partial Dependence Plots
 
-```{python}
+[SHAP Partial Dependence Plots](https://virginia.box.com/v/dependence-plots)
+
+```{python partial-dependence-plots, eval=FALSE, echo=FALSE}
 
 import numpy as np
 import shap
 import matplotlib.pyplot as plt
 import os
+import pandas as pd
 import warnings
 
 # Ensure the directory exists for saving the plots
@@ -1537,9 +1690,10 @@ output_dir = 'images/dependence_plots'
 os.makedirs(output_dir, exist_ok=True)
 
 # Extract SHAP values and input data
-shap_values_data = filtered_shap_values.values
-input_data = filtered_shap_values.data
+shap_values_data = shap_values.values
+input_data = shap_values.data
 
+# Filter invalid rows
 def filter_valid_indices(shap_values, input_data):
     valid_rows = np.ones(len(shap_values), dtype=bool)  # Start with all True
     
@@ -1547,8 +1701,8 @@ def filter_valid_indices(shap_values, input_data):
     for col_idx in range(input_data.shape[1]):
         col_data = input_data[:, col_idx]
         
-        # Only apply np.isnan() if the column is numeric
-        if pd.api.types.is_numeric_dtype(col_data):
+        # Check if column is numeric and then apply filtering for NaN or inf values
+        if np.issubdtype(col_data.dtype, np.number):  # For numeric columns
             valid_rows &= ~np.isnan(col_data) & ~np.isinf(col_data)
     
     # Apply similar filtering to SHAP values (since SHAP values are always numeric)
@@ -1562,25 +1716,16 @@ valid_indices = filter_valid_indices(shap_values_data, input_data)
 # Create a new SHAP Explanation object with only valid rows
 filtered_shap_values_clean = shap.Explanation(
     values=shap_values_data[valid_indices],
-    base_values=filtered_shap_values.base_values[valid_indices],
+    base_values=shap_values.base_values[valid_indices],
     data=input_data[valid_indices],
-    feature_names=filtered_shap_values.feature_names
+    feature_names=shap_values.feature_names
 )
-
-
-# Function to check if a feature is numeric
-def is_numeric_array(arr):
-    if isinstance(arr, np.ndarray):
-        return np.issubdtype(arr.dtype, np.number)
-    else:
-        return pd.api.types.is_numeric_dtype(arr)
-      
 
 # Suppress runtime warnings for cleaner output
 warnings.filterwarnings("error", category=RuntimeWarning)
 
 # Loop through features and create SHAP plots
-for feature in filtered_shap_values_clean.feature_names:
+for feature in shap_values.feature_names:
     plt.close()
     plt.figure()  # Create a new figure for each plot
     
@@ -1589,7 +1734,7 @@ for feature in filtered_shap_values_clean.feature_names:
         feature_data = filtered_shap_values_clean[:, feature].data
         
         # Check if the feature is numeric
-        if is_numeric_array(feature_data):
+        if feature in num_features:
             print(f"Processing scatter plot for numeric feature: {feature}")
             shap.plots.scatter(filtered_shap_values_clean[:, feature])
             plt.title(f"SHAP Scatter Plot for {feature}")
