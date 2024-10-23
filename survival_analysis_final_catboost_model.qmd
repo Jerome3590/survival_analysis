@@ -194,6 +194,93 @@ survival_model_test %<>%
 
 ```
 
+#### Demographics Table
+
+```{r}
+library(DataExplorer)
+
+full_model <- rbind(survival_model, survival_model_test)
+```
+
+```{r}
+full_model %<>%
+  mutate(
+    Outcome = factor(outcome, levels = c(0, 1), 
+                     labels = c("Transplanted", "WL mortality/deterioration")),
+    Gender = factor(Gender, levels = c("M","F"), labels = c("Male", "Female")),
+    VAD_REg = factor(VAD_REg, levels = c(-1, 1), labels = c("No", "Yes")),
+    Dialysis = factor(Dialysis, levels = c(-1, 1), labels = c("No", "Yes")),
+    Vent_Reg = factor(Vent_Reg, levels = c(0, 1), labels = c("No", "Yes")),
+    ECMO_Reg = factor(ECMO_Reg, levels = c(0, 1), labels = c("No", "Yes"))
+  )
+
+```
+
+```{r}
+
+library(huxtable)
+
+# Function to calculate median and IQR
+med_iqr <- function(x) {
+  med <- median(x, na.rm = TRUE)
+  iqr <- IQR(x, na.rm = TRUE)
+  lower <- max(0, med - iqr/2)  # Ensure non-negative lower bound
+  upper <- med + iqr/2
+  return(sprintf("%.1f [%.1f, %.1f]", med, lower, upper))
+}
+
+# Function to calculate percentage
+pct <- function(x) {
+  return(sprintf("%.1f%%", mean(x, na.rm = TRUE) * 100))
+}
+
+# Create the table
+demo_table <- full_model %>%
+  group_by(Outcome) %>%
+  summarise(
+    `Gender (% Female)` = pct(Gender == "Female"),
+    Age = med_iqr(Age),
+    Weight = med_iqr(Weight),
+    Height = med_iqr(Height),
+    BMI = med_iqr(BMI),
+    `Blood Type A` = pct(Blood_Type == "A"),
+    `Blood Type B` = pct(Blood_Type == "B"),
+    `Blood Type AB` = pct(Blood_Type == "AB"),
+    `Blood Type O` = pct(Blood_Type == "O"),
+    `Race White` = pct(Race == "White"),
+    `Race Black` = pct(Race == "Black"),
+    `Race Other` = pct(Race == "Other"),
+    `VAD %` = pct(VAD_REg == "Yes"),
+    eGFR = med_iqr(eGFR),
+    Albumin = med_iqr(Albumin),
+    `Dialysis %` = pct(Dialysis == "Yes"),
+    `Ventilator %` = pct(Vent_Reg == "Yes"),
+    `ECMO %` = pct(ECMO_Reg == "Yes")
+  ) %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column("Characteristic")
+
+# Rename columns
+colnames(demo_table) <- c("Trait", "Transplanted", "WL Mortality")
+
+# Convert to huxtable
+ht <- as_hux(demo_table) %>%
+  set_bold(1, everywhere) %>%
+  set_bottom_border(1, everywhere) %>%
+  set_align(everywhere, 1, "left") %>%
+  set_align(everywhere, 2:3, "center") %>%
+  set_width(0.9) 
+
+# Print the huxtable
+print_screen(ht)
+```
+
+```{r}
+tab
+```
+
+
 ```{r echo=FALSE}
 
 cat_features_train <- names(survival_model)[sapply(survival_model, is.factor)]
