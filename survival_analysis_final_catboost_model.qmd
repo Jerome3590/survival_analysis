@@ -194,15 +194,12 @@ survival_model_test %<>%
 
 ```
 
-#### Demographics Table
+### Demographics Table
 
-```{r}
-library(DataExplorer)
+```{r eval=TRUE, echo=FALSE}
 
 full_model <- rbind(survival_model, survival_model_test)
-```
 
-```{r}
 full_model %<>%
   mutate(
     Outcome = factor(outcome, levels = c(0, 1), 
@@ -216,7 +213,7 @@ full_model %<>%
 
 ```
 
-```{r}
+```{r eval=TRUE, echo=FALSE}
 
 library(huxtable)
 
@@ -234,35 +231,84 @@ pct <- function(x) {
   return(sprintf("%.1f%%", mean(x, na.rm = TRUE) * 100))
 }
 
-# Create the table
+# Function to calculate non-missing counts per feature
+n_for_feature <- function(x) {
+  return(sprintf("(N=%d)", sum(!is.na(x))))
+}
+
+
+# Function to calculate p-values for categorical variables (Chi-squared test or Fisher's exact test)
+p_value_cat <- function(var, outcome) {
+  tbl <- table(var, outcome)
+  if (min(tbl) < 5) {
+    # Use Fisher's exact test if expected counts are small
+    return(fisher.test(tbl)$p.value)
+  } else {
+    # Use Chi-squared test otherwise
+    return(chisq.test(tbl)$p.value)
+  }
+}
+
+# Function to calculate p-values for continuous variables (Wilcoxon rank-sum test)
+p_value_cont <- function(var, outcome) {
+  return(wilcox.test(var ~ outcome)$p.value)
+}
+
+# Calculate the p-values for each feature outside the summarise() function
+p_values <- c(
+  p_value_cat(full_model$Gender, full_model$Outcome),
+  p_value_cont(full_model$Age, full_model$Outcome),
+  p_value_cont(full_model$Weight, full_model$Outcome),
+  p_value_cont(full_model$Height, full_model$Outcome),
+  p_value_cont(full_model$BMI, full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "A", full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "B", full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "AB", full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "O", full_model$Outcome),
+  p_value_cat(full_model$Race == "White", full_model$Outcome),
+  p_value_cat(full_model$Race == "Black", full_model$Outcome),
+  p_value_cat(full_model$Race == "Other", full_model$Outcome),
+  p_value_cat(full_model$VAD_REg == "Yes", full_model$Outcome),
+  p_value_cont(full_model$eGFR, full_model$Outcome),
+  p_value_cont(full_model$Albumin, full_model$Outcome),
+  p_value_cat(full_model$Dialysis == "Yes", full_model$Outcome),
+  p_value_cat(full_model$Vent_Reg == "Yes", full_model$Outcome),
+  p_value_cat(full_model$ECMO_Reg == "Yes", full_model$Outcome)
+)
+
+# Summarize the table with N counts for each feature
 demo_table <- full_model %>%
   group_by(Outcome) %>%
   summarise(
-    `Gender (% Female)` = pct(Gender == "Female"),
-    Age = med_iqr(Age),
-    Weight = med_iqr(Weight),
-    Height = med_iqr(Height),
-    BMI = med_iqr(BMI),
-    `Blood Type A` = pct(Blood_Type == "A"),
-    `Blood Type B` = pct(Blood_Type == "B"),
-    `Blood Type AB` = pct(Blood_Type == "AB"),
-    `Blood Type O` = pct(Blood_Type == "O"),
-    `Race White` = pct(Race == "White"),
-    `Race Black` = pct(Race == "Black"),
-    `Race Other` = pct(Race == "Other"),
-    `VAD %` = pct(VAD_REg == "Yes"),
-    eGFR = med_iqr(eGFR),
-    Albumin = med_iqr(Albumin),
-    `Dialysis %` = pct(Dialysis == "Yes"),
-    `Ventilator %` = pct(Vent_Reg == "Yes"),
-    `ECMO %` = pct(ECMO_Reg == "Yes")
+    `Gender (% Female)` = paste(pct(Gender == "Female"), n_for_feature(Gender)),
+    Age = paste(med_iqr(Age), n_for_feature(Age)),
+    Weight = paste(med_iqr(Weight), n_for_feature(Weight)),
+    Height = paste(med_iqr(Height), n_for_feature(Height)),
+    BMI = paste(med_iqr(BMI), n_for_feature(BMI)),
+    `Blood Type A` = paste(pct(Blood_Type == "A"), n_for_feature(Blood_Type)),
+    `Blood Type B` = paste(pct(Blood_Type == "B"), n_for_feature(Blood_Type)),
+    `Blood Type AB` = paste(pct(Blood_Type == "AB"), n_for_feature(Blood_Type)),
+    `Blood Type O` = paste(pct(Blood_Type == "O"), n_for_feature(Blood_Type)),
+    `Race White` = paste(pct(Race == "White"), n_for_feature(Race)),
+    `Race Black` = paste(pct(Race == "Black"), n_for_feature(Race)),
+    `Race Other` = paste(pct(Race == "Other"), n_for_feature(Race)),
+    `VAD %` = paste(pct(VAD_REg == "Yes"), n_for_feature(VAD_REg)),
+    eGFR = paste(med_iqr(eGFR), n_for_feature(eGFR)),
+    Albumin = paste(med_iqr(Albumin), n_for_feature(Albumin)),
+    `Dialysis %` = paste(pct(Dialysis == "Yes"), n_for_feature(Dialysis)),
+    `Ventilator %` = paste(pct(Vent_Reg == "Yes"), n_for_feature(Vent_Reg)),
+    `ECMO %` = paste(pct(ECMO_Reg == "Yes"), n_for_feature(ECMO_Reg))
   ) %>%
-  t() %>%
-  as.data.frame() %>%
-  rownames_to_column("Characteristic")
+  pivot_longer(cols = -Outcome, names_to = "Characteristic", values_to = "Summary") %>% # Reshape data long
+  pivot_wider(names_from = Outcome, values_from = Summary) %>%  # Reshape data wide
+  ungroup()
 
-# Rename columns
-colnames(demo_table) <- c("Trait", "Transplanted", "WL Mortality")
+# Add p-values as a new column (assuming p_values is the correct length)
+formatted_p_values <- sprintf("%.3f", p_values)
+demo_table$`P-value` <- formatted_p_values
+
+# Rename columns for clarity
+colnames(demo_table) <- c("Trait", "Transplanted", "WL Mortality", "P-value")
 
 # Convert to huxtable
 ht <- as_hux(demo_table) %>%
@@ -270,14 +316,11 @@ ht <- as_hux(demo_table) %>%
   set_bottom_border(1, everywhere) %>%
   set_align(everywhere, 1, "left") %>%
   set_align(everywhere, 2:3, "center") %>%
-  set_width(0.9) 
+  set_width(0.9)
 
-# Print the huxtable
-print_screen(ht)
-```
+# View the table
+ht
 
-```{r}
-tab
 ```
 
 
@@ -723,7 +766,6 @@ comparison_df = comparison_df.sort_values(
 )
 
 ```
-
 
 ```{r feature-importances-native-model}
 
@@ -1761,88 +1803,213 @@ plot
 
 ### SHAP Partial Dependence Plots
 
-[SHAP Partial Dependence Plots](https://virginia.box.com/v/dependence-plots)
+[SHAP Partial Dependence Plots](https://virginia.box.com/v/survival-analysis-shap-pdp)
 
-```{python partial-dependence-plots, eval=FALSE, echo=FALSE}
+```{r eval=FALSE, echo=FALSE}
 
-import numpy as np
-import shap
-import matplotlib.pyplot as plt
-import os
-import pandas as pd
-import warnings
+feature_names <- py$feature_names
+shap_data <- py$shap_feature_importance
 
-# Ensure the directory exists for saving the plots
-output_dir = 'images/dependence_plots'
-os.makedirs(output_dir, exist_ok=True)
+pdp_shap_data <- shap_data %>% 
+  select(1:31) 
 
-# Extract SHAP values and input data
-shap_values_data = shap_values.values
-input_data = shap_values.data
+colnames(pdp_shap_data) <- feature_names
 
-# Filter invalid rows
-def filter_valid_indices(shap_values, input_data):
-    valid_rows = np.ones(len(shap_values), dtype=bool)  # Start with all True
-    
-    # Iterate over each feature (column)
-    for col_idx in range(input_data.shape[1]):
-        col_data = input_data[:, col_idx]
-        
-        # Check if column is numeric and then apply filtering for NaN or inf values
-        if np.issubdtype(col_data.dtype, np.number):  # For numeric columns
-            valid_rows &= ~np.isnan(col_data) & ~np.isinf(col_data)
-    
-    # Apply similar filtering to SHAP values (since SHAP values are always numeric)
-    valid_rows &= ~np.isnan(shap_values).any(axis=1) & ~np.isinf(shap_values).any(axis=1)
-    
-    return np.where(valid_rows)
-
-# Filter valid rows
-valid_indices = filter_valid_indices(shap_values_data, input_data)
-
-# Create a new SHAP Explanation object with only valid rows
-filtered_shap_values_clean = shap.Explanation(
-    values=shap_values_data[valid_indices],
-    base_values=shap_values.base_values[valid_indices],
-    data=input_data[valid_indices],
-    feature_names=shap_values.feature_names
-)
-
-# Suppress runtime warnings for cleaner output
-warnings.filterwarnings("error", category=RuntimeWarning)
-
-# Loop through features and create SHAP plots
-for feature in shap_values.feature_names:
-    plt.close()
-    plt.figure()  # Create a new figure for each plot
-    
-    try:
-        # Get feature data
-        feature_data = filtered_shap_values_clean[:, feature].data
-        
-        # Check if the feature is numeric
-        if feature in num_features:
-            print(f"Processing scatter plot for numeric feature: {feature}")
-            shap.plots.scatter(filtered_shap_values_clean[:, feature])
-            plt.title(f"SHAP Scatter Plot for {feature}")
-            plt.tight_layout()
-            plt.savefig(f'{output_dir}/shap_scatter_{feature}.png', dpi=300)
-            plt.show()
-            plt.close()
-        else:
-            print(f"Processing bar plot for categorical feature: {feature}")
-            # For categorical features, use bar plot
-            shap.plots.bar(filtered_shap_values_clean[:, feature])
-            plt.title(f"SHAP Bar Plot for {feature} (Categorical)")
-            plt.tight_layout()
-            plt.savefig(f'{output_dir}/shap_bar_{feature}.png', dpi=300)
-            plt.show()
-            plt.close()
-
-    except RuntimeWarning as e:
-        print(f"RuntimeWarning for feature {feature}: {e}")
-    except Exception as e:
-        print(f"Error plotting feature {feature}: {e}")
-
-        
 ```
+
+#### Numeric Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r eval=FALSE}
+
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+
+# Function to create SHAP partial dependency plots for numerical features
+create_pdp_numeric <- function(feature_name, test_data, pdp_shap_data, save_plots = TRUE) {
+  
+    # Set the threshold for outlier removal based on Z-score
+    threshold <- 3
+    
+    # Check if the feature is present in both test_data and pdp_shap_data
+    if (!feature_name %in% colnames(test_data) || !feature_name %in% colnames(pdp_shap_data)){
+      stop(paste("Feature", feature_name, "not found in the data."))
+    }
+    
+    # Dataframe for the feature values and corresponding SHAP values
+    pdp_shap_data_feature <- data.frame(
+      feature_value = test_data[[feature_name]],  # Original feature values
+      shap_value = pdp_shap_data[[feature_name]]  # SHAP values
+    )
+    
+     # Remove rows with NA values in either feature_value or shap_value
+    pdp_shap_data_feature <- na.omit(pdp_shap_data_feature)
+    
+    if (feature_name == 'eGFR'){
+      pdp_shap_data_feature <- pdp_shap_data_feature[pdp_shap_data_feature$feature_value < 400, ]
+    }
+    
+    # Scatter plot using ggplot2
+    scatter_plot <- ggplot(pdp_shap_data_feature, aes(x = feature_value, y = shap_value)) +
+      geom_point(color = 'blue', alpha = 0.6) + 
+      scale_x_continuous() +
+      scale_y_continuous() +  
+      labs(x = paste(feature_name, "Values"),
+           y = "SHAP Values",
+           title = paste("SHAP Partial Dependency Plot for", feature_name)) +
+      theme_minimal()  # Apply a clean theme for the plot
+    
+    # Create marginal histogram for the bottom (x-axis)
+    histogram_plot <- ggplot(pdp_shap_data_feature, aes(x = feature_value)) +
+      geom_histogram(fill = "grey", bins = 30) +
+      theme_minimal() +
+      labs(x = paste(feature_name, "Values"), y = "Count")
+    
+    # Remove axis labels, ticks, and gridlines from the histogram to clean up appearance
+    histogram_plot <- histogram_plot +
+      theme(
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank(), 
+        plot.margin = margin(5, 5, 5, 5)
+      )
+    
+    combined_plot <- scatter_plot / histogram_plot + plot_layout(heights = c(20, 1))
+    
+    # Display the plot
+    print(combined_plot)
+    
+    # Save the plot as a PNG file
+    if (save_plots) {
+      ggsave(paste0("images/dependence_plots/shap_plot_numeric_", feature_name, ".png"), combined_plot)
+    }
+}
+
+```
+
+```{r eval=FALSE}
+
+feature_to_plot <- "eGFR" 
+
+create_pdp_numeric(feature_to_plot, test_data, pdp_shap_data, save_plots = TRUE)
+
+```
+
+#### Categorical Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r eval=FALSE}
+
+# Function to create a partial dependency plot for categorical features
+create_pdp_categorical <- function(feature_name, test_data, pdp_shap_data, save_plot = TRUE, plot_width = 5, plot_height = 4) {
+  
+  # Check if the feature is present in both test_data and pdp_shap_data
+  if (!feature_name %in% colnames(test_data) || !feature_name %in% colnames(pdp_shap_data)) {
+    stop(paste("Feature", feature_name, "not found in the data."))
+  }
+  
+  # Create a dataframe for the feature values and corresponding SHAP values
+  pdp_shap_data_feature <- data.frame(
+    feature_value = test_data[[feature_name]],  # Actual feature values (categories)
+    shap_value = pdp_shap_data[[feature_name]]  # Corresponding SHAP values
+  )
+  
+  # Calculate the mean SHAP value for each category
+  pdp_shap_summary <- pdp_shap_data_feature %>%
+    group_by(feature_value) %>%
+    summarize(mean_shap = mean(shap_value, na.rm = TRUE))
+  
+  plot <- ggplot(pdp_shap_summary, 
+               aes(
+                 x = if (feature_name %in% c("Diag_Code", "Status_Reg")) mean_shap else feature_value,
+                 y = if (feature_name %in% c("Diag_Code", "Status_Reg")) feature_value else mean_shap,
+                 fill = feature_value
+               )) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  
+  # Conditionally set x and y axis labels based on whether the feature is Diag_Code or Status_Reg
+  labs(
+    x = if (feature_name %in% c("Diag_Code", "Status_Reg")) "Mean SHAP Value" else paste(feature_name, "Categories"),
+    y = if (feature_name %in% c("Diag_Code", "Status_Reg")) paste(feature_name, "Categories") else "Mean SHAP Value",
+    title = paste("Partial Dependency Plot for", feature_name)
+  ) +
+  
+  # Apply conditional theme to hide the x-axis for "List_Ctr"
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),  # Remove gridlines if desired
+    
+    # Conditionally hide x-axis text, title, and ticks for "List_Ctr"
+    axis.text.x = if (feature_name == "List_Ctr") element_blank() else element_text(),
+    axis.title.x = if (feature_name == "List_Ctr") element_blank() else element_text(),
+    axis.ticks.x = if (feature_name == "List_Ctr") element_blank() else element_line(),
+    
+    # Keep y-axis text, title, and ticks unchanged
+    axis.text.y = element_text(),
+    axis.title.y = element_text()
+  )
+
+  
+  # Display the plot
+  print(plot)
+  
+  # Save the plot
+  if (save_plot) {
+    ggsave(paste0("images/dependence_plots/shap_plot_categorical_", feature_name, ".png"), plot, width = plot_width, height = plot_height)
+  }
+}
+
+```
+
+```{r eval=FALSE}
+create_pdp_categorical("Race", test_data, pdp_shap_data)
+```
+
+#### Final Shap Value Partial Dependency  Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r eval=FALSE}
+
+# Function to determine the type of feature and call the appropriate plotting function for multiple features
+create_shap_pdp_plots <- function(feature_names, test_data, pdp_shap_data, save_plots = TRUE) {
+  
+  # Loop over each feature in the feature_names list
+  for (feature_name in feature_names) {
+    
+    # Check if the feature is present in test_data
+    if (!feature_name %in% colnames(test_data)) {
+      message(paste("Feature", feature_name, "not found in the data. Skipping..."))
+      next  # Skip this feature if not found
+    }
+    
+    # Determine if the feature is numeric or categorical
+    if (is.numeric(test_data[[feature_name]])) {
+      # If numeric, call the numeric plotting function
+      create_pdp_numeric(feature_name, test_data, pdp_shap_data, save_plots = TRUE)
+    } else if (is.factor(test_data[[feature_name]]) || is.character(test_data[[feature_name]])) {
+      # If categorical, call the categorical plotting function
+      create_pdp_categorical(feature_name, test_data, pdp_shap_data, save_plot = TRUE, plot_width = 5, plot_height = 4)
+    } else {
+      message(paste("Unsupported data type for feature:", feature_name, "Skipping..."))
+    }
+  }
+}
+
+
+```
+
+
+```{r eval=FALSE}
+
+feature_names
+
+```
+
+```{r eval=FALSE}
+create_shap_pdp_plots(feature_names, test_data, pdp_shap_data, save_plots = TRUE)
+```
+
+
+
