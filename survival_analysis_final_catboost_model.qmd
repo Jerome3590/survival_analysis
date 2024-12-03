@@ -1653,7 +1653,7 @@ plt.close()
 
 ### SHAP Partial Dependence Plots
 
-[SHAP Partial Dependence Plots](https://virginia.box.com/v/survival-analysis-shap-pdp)
+[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots)
 
 ```{python eval=FALSE, echo=FALSE}
 
