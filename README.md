@@ -4,45 +4,45 @@ This repository contains a comprehensive survival analysis project focusing on m
 
 ## Project Structure
 
-survival_analysis/
-│
-├── ![survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
-├── eda/
-│ ├── center-stats.qmd
-│ ├── listing-mortality-prediction.qmd
-│ ├── survival_analysis_catboost_xgboost_random_forest.qmd
-│ ├── survival_analysis_feature_analysis.qmd
-│ ├── survival_analysis_feature_encoding.qmd
-│ ├── survival_analysis_model_evaluation.qmd
-│ ├── survival_analysis_models.qmd
-│ └── waitlist-data2.qmd
-│
-├── html/
-│ ├── center-stats.html
-│ ├── listing-mortality-prediction.html
-│ ├── model_data.html
-│ ├── sorted_shap_values_interactive.html
-│ ├── survival_analysis_final_catboost_model.html
-│ └── waitlist-data2.html
-│
-├── images/
-│ ├── catboost_beeswarm.png
-│ ├── mean_absolute_shap_importance.png
-│ ├── partial_dependence_plots/
-│ ├── shap_correlation_plot.png
-│ └── shapley_bar_one_hot.png
-│
-├── utilities/
-│ └── plotting.R
-│
-└── data/
+survival_analysis/  
+│  
+├── [survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.  amazonaws.com/survival_analysis_final_catboost_model.html)
+├── eda/  
+│ ├── center-stats.qmd  
+│ ├── listing-mortality-prediction.qmd  
+│ ├── survival_analysis_catboost_xgboost_random_forest.qmd  
+│ ├── survival_analysis_feature_analysis.qmd  
+│ ├── survival_analysis_feature_encoding.qmd  
+│ ├── survival_analysis_model_evaluation.qmd  
+│ ├── survival_analysis_models.qmd  
+│ └── waitlist-data2.qmd  
+│  
+├── html/  
+│ ├── center-stats.html  
+│ ├── listing-mortality-prediction.html  
+│ ├── model_data.html  
+│ ├── sorted_shap_values_interactive.html  
+│ ├── survival_analysis_final_catboost_model.html  
+│ └── waitlist-data2.html  
+│  
+├── images/  
+│ ├── catboost_beeswarm.png  
+│ ├── mean_absolute_shap_importance.png  
+│ ├── partial_dependence_plots/  
+│ ├── shap_correlation_plot.png  
+│ └── shapley_bar_one_hot.png  
+│  
+├── utilities/  
+│ └── plotting.R  
+│  
+└── data/  
 
 
 ## Project Components
 
 ### Main Analysis
 - `survival_analysis_final_catboost_model.qmd`: The final CatBoost model for survival analysis.
-![survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
+[survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 ### Exploratory Data Analysis (EDA)
 The `eda/` directory contains Quarto documents (.qmd files) for various aspects of the analysis:
