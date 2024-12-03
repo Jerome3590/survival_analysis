@@ -88,10 +88,6 @@ To reproduce the analysis:
 3. Run `survival_analysis_final_catboost_model.qmd`.
 
 
-## License
-
-[Include license information here]
-
 ## Contact
 
 [Jerome Dixon](https://www.linkedin.com/in/jeromedixon3590/)
