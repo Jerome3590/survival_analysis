@@ -1,0 +1,1912 @@
+---
+title: "Survival Analysis: CatBoost"
+author: "R. Jerome Dixon"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+format:
+  html:
+    toc: true
+    toc-depth: 5
+    code-fold: true
+    code-summary: "Show the code"
+    embed-resources: true
+    default-image-extension: svg
+    dpi: 600
+---
+
+```{r load-libraries}
+#| echo: false
+#| warning: false
+#| message: false
+
+library(here)
+library(dplyr)
+library(readr)
+library(magrittr)
+library(spatstat)
+library(tibble)
+library(ggplot2)
+library(purrr)
+library(tidyverse)
+library(huxtable)
+library(reticulate)
+library(DT)
+library(caret)
+library(forcats)
+library(jsonlite)
+library(quarto)
+library(plotly)
+library(probably)
+library(pROC)
+library(lubridate)
+library(digest)
+
+(options)(scipen=999)
+
+```
+
+### Survival Model Dataset  {.hidden .unnumbered .unlisted}
+
+```{r echo=FALSE}  
+
+hash_numeric_string_to_letters <- Vectorize(function(input_str) {
+  # Ensure the input is a numeric string
+  if (!grepl("^[0-9]+$", input_str)) {
+    stop("Input should be a numeric string")
+  }
+  
+  # Hash the input string using MD5
+  md5_hash <- digest(input_str, algo = "md5", serialize = FALSE)
+  
+  # Define the set of letters to use (lowercase a-z)
+  letters <- unlist(strsplit("abcdefghijklmnopqrstuvwxyz", ""))
+  
+  # Convert the first 12 hex digits of the hash into a 6-letter string
+  result <- c()
+  for (i in seq(1, 12, by = 2)) {
+    hex_value <- substr(md5_hash, i, i+1)  # Take 2 hex digits
+    int_value <- strtoi(hex_value, base = 16)  # Convert hex to int
+    letter_index <- (int_value %% length(letters)) + 1  # Map to one of the 26 letters
+    result <- c(result, letters[letter_index])
+  }
+  
+  # Join the list of letters into a string and return
+  return(paste(result, collapse = ""))
+})
+
+```
+
+```{r load-dataset}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
+
+set.seed(1997)
+
+survival_model <- read_rds(here("data","model_data_train.rds"))
+
+survival_model %<>%
+  mutate(
+    List_Yr = year(WL_DT),
+    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0),
+    DIALYSIS_CAND = recode(DIALYSIS_CAND, "No" = -1, "Unknown" = 0, "Yes" = 1),
+    VAD_CAND_REG = recode(VAD_CAND_REG, "No" = -1, "Yes" = 1)) %>% 
+  mutate(List_Ctr = hash_numeric_string_to_letters(as.character(LISTING_CTR_CODE))) %>%
+  mutate_if(is.character, as.factor) 
+
+```
+
+```{r echo=FALSE}
+
+survival_model %<>% 
+  select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS, -LISTING_CTR_CODE, -FUNC_STAT_CAND_REG, -IMPL_DEFIBRIL)
+
+
+survival_model %<>%
+  rename(
+    Age = AGE,
+    Gender = GENDER,
+    Race = RACE,
+    Weight = WEIGHT_KG,
+    Height = HEIGHT_CM,
+    BMI = BMI,
+    BSA = BSA,
+    Blood_Type = ABO,
+    PGE_TCR = PGE_TCR,
+    ECMO_Reg = ECMO_CAND_REG,
+    VAD = VAD_CAND_REG,
+    VAD_TCR = VAD_DEVICE_TY_TCR,
+    Vent_Reg = VENTILATOR_CAND_REG,
+    WL_Oth_Org = WL_OTHER_ORG,
+    Cereb_Vasc = CEREB_VASC,
+    Dialysis = DIALYSIS_CAND,
+    Diabetes = DIAB,
+    Inotrop = INOTROPES_TCR,
+    Creatinine = MOST_RCNT_CREAT,
+    eGFR = eGFR,
+    Albumin = TOT_SERUM_ALBUM,
+    Diag_Code = CAND_DIAG,
+    Prior_HRTX = pedhrtx_prev_yr,
+    Med_Refusals = median_refusals,
+    Prop_Refusals = p_refusals,
+    XMatch_Req = PRELIM_XMATCH_REQ
+  )
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
+
+survival_model_test <- read_rds(here("data","model_data_test.rds"))
+
+survival_model_test %<>%
+    mutate(
+    List_Yr = year(WL_DT),
+    Policy_Chg = if_else(as.Date(WL_DT) >= as.Date("2016-07-07"), 1, 0),
+    DIALYSIS_CAND = recode(DIALYSIS_CAND, "No" = -1, "Unknown" = 0, "Yes" = 1),
+    VAD_CAND_REG = recode(VAD_CAND_REG, "No" = -1, "Yes" = 1)) %>% 
+  mutate(List_Ctr = hash_numeric_string_to_letters(as.character(LISTING_CTR_CODE))) %>%
+  mutate_if(is.character, as.factor) 
+
+```
+
+```{r echo=FALSE}
+
+survival_model_test %<>% 
+  select(-median_refusals_old, -LC_effect, -mean_refusals, -WL_ID_CODE, -WL_DT, -LIST_YR, -CITIZENSHIP, -REGION, -starts_with("median_wait_days"), -starts_with("DONCRIT"), -HEMODYNAMICS_CO, -INOTROP_VASO_CO_REG, -CAND_DIAG_CODE, -CAND_DIAG_LISTING, -LIFE_SUPPORT_CAND_REG, -LIFE_SUPPORT_OTHER, -STATUS, -LISTING_CTR_CODE, -FUNC_STAT_CAND_REG, -IMPL_DEFIBRIL)
+
+survival_model_test %<>%
+  rename(
+    Age = AGE,
+    Gender = GENDER,
+    Race = RACE,
+    Weight = WEIGHT_KG,
+    Height = HEIGHT_CM,
+    BMI = BMI,
+    BSA = BSA,
+    Blood_Type = ABO,
+    PGE_TCR = PGE_TCR,
+    ECMO_Reg = ECMO_CAND_REG,
+    VAD = VAD_CAND_REG,
+    VAD_TCR = VAD_DEVICE_TY_TCR,
+    Vent_Reg = VENTILATOR_CAND_REG,
+    WL_Oth_Org = WL_OTHER_ORG,
+    Cereb_Vasc = CEREB_VASC,
+    Dialysis = DIALYSIS_CAND,
+    Diabetes = DIAB,
+    Inotrop = INOTROPES_TCR,
+    Creatinine = MOST_RCNT_CREAT,
+    eGFR = eGFR,
+    Albumin = TOT_SERUM_ALBUM,
+    Diag_Code = CAND_DIAG,
+    Prior_HRTX = pedhrtx_prev_yr,
+    Med_Refusals = median_refusals,
+    Prop_Refusals = p_refusals,
+    XMatch_Req = PRELIM_XMATCH_REQ
+  )
+
+```
+
+### Demographics Table
+
+```{r eval=TRUE, echo=FALSE}
+
+full_model <- rbind(survival_model, survival_model_test)
+
+full_model %<>%
+  mutate(
+    Outcome = factor(outcome, levels = c(0, 1), 
+                     labels = c("Transplanted", "WL mortality/deterioration")),
+    Gender = factor(Gender, levels = c("M","F"), labels = c("Male", "Female")),
+    VAD = factor(VAD, levels = c(-1, 1), labels = c("No", "Yes")),
+    Dialysis = factor(Dialysis, levels = c(-1, 1), labels = c("No", "Yes")),
+    Vent_Reg = factor(Vent_Reg, levels = c(0, 1), labels = c("No", "Yes")),
+    ECMO_Reg = factor(ECMO_Reg, levels = c(0, 1), labels = c("No", "Yes"))
+  )
+
+```
+
+```{r eval=TRUE, echo=FALSE}
+
+library(huxtable)
+
+# Function to calculate median and IQR
+med_iqr <- function(x) {
+  med <- median(x, na.rm = TRUE)
+  iqr <- IQR(x, na.rm = TRUE)
+  lower <- max(0, med - iqr/2)  # Ensure non-negative lower bound
+  upper <- med + iqr/2
+  return(sprintf("%.1f [%.1f, %.1f]", med, lower, upper))
+}
+
+# Function to calculate percentage
+pct <- function(x) {
+  return(sprintf("%.1f%%", mean(x, na.rm = TRUE) * 100))
+}
+
+# Function to calculate non-missing counts per feature
+n_for_feature <- function(x) {
+  return(sprintf("(N=%d)", sum(!is.na(x))))
+}
+
+
+# Function to calculate p-values for categorical variables (Chi-squared test or Fisher's exact test)
+p_value_cat <- function(var, outcome) {
+  tbl <- table(var, outcome)
+  if (min(tbl) < 5) {
+    # Use Fisher's exact test if expected counts are small
+    return(fisher.test(tbl)$p.value)
+  } else {
+    # Use Chi-squared test otherwise
+    return(chisq.test(tbl)$p.value)
+  }
+}
+
+# Function to calculate p-values for continuous variables (Wilcoxon rank-sum test)
+p_value_cont <- function(var, outcome) {
+  return(wilcox.test(var ~ outcome)$p.value)
+}
+
+# Calculate the p-values for each feature outside the summarise() function
+p_values <- c(
+  p_value_cat(full_model$Gender, full_model$Outcome),
+  p_value_cont(full_model$Age, full_model$Outcome),
+  p_value_cont(full_model$Weight, full_model$Outcome),
+  p_value_cont(full_model$Height, full_model$Outcome),
+  p_value_cont(full_model$BMI, full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "A", full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "B", full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "AB", full_model$Outcome),
+  p_value_cat(full_model$Blood_Type == "O", full_model$Outcome),
+  p_value_cat(full_model$Race == "White", full_model$Outcome),
+  p_value_cat(full_model$Race == "Black", full_model$Outcome),
+  p_value_cat(full_model$Race == "Other", full_model$Outcome),
+  p_value_cat(full_model$VAD == "Yes", full_model$Outcome),
+  p_value_cont(full_model$eGFR, full_model$Outcome),
+  p_value_cont(full_model$Albumin, full_model$Outcome),
+  p_value_cat(full_model$Dialysis == "Yes", full_model$Outcome),
+  p_value_cat(full_model$Vent_Reg == "Yes", full_model$Outcome),
+  p_value_cat(full_model$ECMO_Reg == "Yes", full_model$Outcome)
+)
+
+# Summarize the table with N counts for each feature
+demo_table <- full_model %>%
+  group_by(Outcome) %>%
+  summarise(
+    `Gender (% Female)` = paste(pct(Gender == "Female"), n_for_feature(Gender)),
+    Age = paste(med_iqr(Age), n_for_feature(Age)),
+    Weight = paste(med_iqr(Weight), n_for_feature(Weight)),
+    Height = paste(med_iqr(Height), n_for_feature(Height)),
+    BMI = paste(med_iqr(BMI), n_for_feature(BMI)),
+    `Blood Type A` = paste(pct(Blood_Type == "A"), n_for_feature(Blood_Type)),
+    `Blood Type B` = paste(pct(Blood_Type == "B"), n_for_feature(Blood_Type)),
+    `Blood Type AB` = paste(pct(Blood_Type == "AB"), n_for_feature(Blood_Type)),
+    `Blood Type O` = paste(pct(Blood_Type == "O"), n_for_feature(Blood_Type)),
+    `Race White` = paste(pct(Race == "White"), n_for_feature(Race)),
+    `Race Black` = paste(pct(Race == "Black"), n_for_feature(Race)),
+    `Race Other` = paste(pct(Race == "Other"), n_for_feature(Race)),
+    `VAD %` = paste(pct(VAD == "Yes"), n_for_feature(VAD)),
+    eGFR = paste(med_iqr(eGFR), n_for_feature(eGFR)),
+    Albumin = paste(med_iqr(Albumin), n_for_feature(Albumin)),
+    `Dialysis %` = paste(pct(Dialysis == "Yes"), n_for_feature(Dialysis)),
+    `Ventilator %` = paste(pct(Vent_Reg == "Yes"), n_for_feature(Vent_Reg)),
+    `ECMO %` = paste(pct(ECMO_Reg == "Yes"), n_for_feature(ECMO_Reg))
+  ) %>%
+  pivot_longer(cols = -Outcome, names_to = "Characteristic", values_to = "Summary") %>% # Reshape data long
+  pivot_wider(names_from = Outcome, values_from = Summary) %>%  # Reshape data wide
+  ungroup()
+
+# Add p-values as a new column (assuming p_values is the correct length)
+formatted_p_values <- sprintf("%.3f", p_values)
+demo_table$`P-value` <- formatted_p_values
+
+# Rename columns for clarity
+colnames(demo_table) <- c("Trait", "Transplanted", "WL Mortality", "P-value")
+
+# Convert to huxtable
+ht <- as_hux(demo_table) %>%
+  set_bold(1, everywhere) %>%
+  set_bottom_border(1, everywhere) %>%
+  set_align(everywhere, 1, "left") %>%
+  set_align(everywhere, 2:3, "center") %>%
+  set_width(0.9)
+
+# View the table
+ht
+
+```
+
+
+```{r echo=FALSE}
+
+cat_features_train <- names(survival_model)[sapply(survival_model, is.factor)]
+
+```
+
+```{r echo=FALSE}
+
+cat_features_test <- names(survival_model_test)[sapply(survival_model_test, is.factor)]
+
+```
+
+#### Utility Function for Categorical Indexes  {.hidden .unnumbered .unlisted}
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
+
+def get_categorical_indexes(X_train):
+    # Select columns with object or categorical dtype
+    categorical_columns = X_train.select_dtypes(include=['object', 'category'])
+
+    # Get the column indexes of categorical variables
+    categorical_indexes = [X_train.columns.get_loc(col) for col in categorical_columns]
+
+    return categorical_indexes
+
+```
+
+### Native CatBoost Model
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
+
+# Train
+train_data <- survival_model %>% 
+  select(-outcome)
+
+# Must be factor or numeric "Class"
+train_target <- survival_model %>% 
+  select(outcome) %>% 
+  dummify() %>% 
+  as.data.frame()
+
+train_Y <- survival_model$outcome
+
+
+# Test
+test_data <- survival_model_test %>% 
+  select(-outcome)
+
+# Must be factor or numeric "Class"
+test_target <- survival_model_test %>% 
+  select(outcome) %>% 
+  dummify() %>% 
+  as.data.frame()
+
+test_Y <- survival_model_test$outcome
+
+```
+
+```{python catboost-r-data, echo=FALSE}
+
+#| echo: false
+#| warning: false
+#| message: false
+
+import numpy as np
+
+# initialize Train and Test datasets
+X_train = r.train_data
+y_train = r.train_Y
+Y_train = np.array(y_train)  
+
+X_test = r.test_data
+y_test = r.test_Y
+Y_test = np.array(y_test) 
+
+cat_index = get_categorical_indexes(X_train)
+cat_index2 = get_categorical_indexes(X_test)
+
+```
+
+#### Data Cleansing  {.hidden .unnumbered .unlisted}
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+import pandas as pd
+
+# Convert NaN values to a string in categorical columns
+categorical_columns = [col for col in X_train.columns if X_train[col].dtype == 'object']
+X_train[categorical_columns] = X_train[categorical_columns].fillna('missing')
+
+
+# Convert NaN values to a string in categorical columns
+categorical_columns = [col for col in X_test.columns if X_test[col].dtype == 'object']
+X_test[categorical_columns] = X_test[categorical_columns].fillna('missing')
+
+```
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# NaN values in the column at index 15
+has_nan = X_train.iloc[:, 11].isna().any()
+print("Column at index 11 contains NaN values:", has_nan)
+
+```
+ 
+ - Clean/Fix index 11
+ 
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Ensure the column at index 11 is categorical and "Missing" is added to categories
+if 'Missing' not in X_train.iloc[:, 11].cat.categories:
+    X_train.iloc[:, 11] = X_train.iloc[:, 11].cat.add_categories(['Missing'])
+
+# Explicitly cast the column to a category type to ensure compatibility
+X_train.iloc[:, 11] = X_train.iloc[:, 11].astype('category')
+
+# Replace NaN values with the "Missing" category
+X_train.iloc[:, 11] = X_train.iloc[:, 11].fillna('Missing')
+
+
+```
+
+#### Optuna Hyperparameter Optimization 
+
+```{python optuna-native-model, eval=FALSE, echo=FALSE}
+
+#| eval: false
+#| echo: false
+#| warning: false
+#| message: false
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+import catboost as cb
+from catboost import Pool
+from catboost.utils import eval_metric
+import optuna
+
+
+def objective(trial):
+    # Parameter suggestions
+    params = {
+        "objective": "Logloss",
+        "iterations": 1000,
+        "early_stopping_rounds": 50,
+        "use_best_model": False,
+        "eval_metric":"AUC",
+        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3),
+        "depth": trial.suggest_int("depth", 1, 9),
+        "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.05, 1.0),
+        "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, 100),
+        "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1, 12),
+        "boosting_type": "Ordered",
+        "bootstrap_type": "MVS",
+        "verbose": 0  # Controlling verbose output
+    }
+
+    model = cb.CatBoostClassifier(**params)
+    train_pool = cb.Pool(X_train, Y_train, cat_features=get_categorical_indexes(X_train))
+    cv_results = cb.cv(train_pool, params, fold_count=3, seed=3590, stratified=True, verbose=False, plot=False)
+    return np.max(cv_results['test-AUC-mean'])
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=50, timeout=6000)
+
+print("Number of finished trials: {}".format(len(study.trials)))
+print("Best trial:")
+for key, value in study.best_trial.params.items():
+    print("  {}: {}".format(key, value))
+
+
+```
+
+-   Best is trial #12/50 with value: 0.74
+
+```{python optuna-params1}
+
+model_params_native = {
+    'learning_rate': 0.15,
+    'depth': 8,
+    'colsample_bylevel': 0.75,
+    'min_data_in_leaf': 95,
+    'l2_leaf_reg': 10.54
+}
+    
+```
+
+#### Model
+
+```{python catboost-model-auc}
+
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+
+import numpy as np
+from sklearn.model_selection import train_test_split, StratifiedKFold
+import pandas as pd
+import optuna
+from catboost import CatBoostClassifier, Pool
+
+
+model_auc = CatBoostClassifier(objective='Logloss',
+                               iterations=1000,
+                               eval_metric="AUC",
+                               **model_params_native, 
+                               boosting_type='Ordered',
+                               bootstrap_type='MVS',
+                               metric_period=25,
+                               early_stopping_rounds=100,
+                               use_best_model=False, 
+                               random_seed=1997)
+
+# Create a Pool object for the training and testing data
+train_pool = Pool(X_train, cat_features=cat_index, label=Y_train)
+test_pool = Pool(X_test, cat_features=cat_index, label=Y_test)
+ 
+
+model_auc.fit(train_pool, eval_set=test_pool)
+
+```
+
+#### Calibration Plot
+
+```{python echo=FALSE}
+
+import pandas as pd
+
+Y_Pred = model_auc.predict(X_test)
+Y_Pred_Proba = model_auc.predict_proba(X_test)[:, 1]  # get the probabilities of the positive class
+
+
+Y_Pred_Proba_Positive = model_auc.predict_proba(X_test)[:, 1]  # Probabilities of the positive class
+Y_Pred_Proba_Negative = model_auc.predict_proba(X_test)[:, 0]  # Probabilities of the negative class
+
+# Converting predictions and actuals into a DataFrame for better readability, including negative class probabilities
+predictions = pd.DataFrame({
+    'Prob_Negative_Class': Y_Pred_Proba_Negative,
+    'Prob_Positive_Class': Y_Pred_Proba_Positive,
+    'Predicted': Y_Pred,
+    'Actual': Y_test
+})
+
+```
+
+
+```{r echo=FALSE}
+
+predictions <- py$predictions %>% 
+  mutate(Class = ifelse(Actual == 0, "survive", "not_survive"),
+         .pred_not_survive = Prob_Positive_Class
+         )
+
+# Define the levels you want
+factor_levels <- c("survive", "not_survive")
+
+# Set the levels of the 'actuals' column
+predictions$Class <- factor(predictions$Class, levels = rev(factor_levels))
+
+predictions %>% 
+  cal_plot_logistic(Class, .pred_not_survive)
+
+```
+
+#### Decision Threshold  {.hidden .unnumbered .unlisted}
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+
+# Calculate the ROC curve
+roc_result <- roc(predictions$Actual, predictions$Prob_Positive_Class)
+
+coords <- coords(roc_result, "best", ret="threshold", best.method="closest.topleft")
+
+# Optimal threshold for maximizing true positive rate
+optimal_threshold <- coords$threshold
+
+# Apply the optimal threshold to convert probabilities to class predictions
+predictions$predicted_classes <- ifelse(predictions$Prob_Positive_Class >= optimal_threshold, 1, 0)
+
+# Output the optimal threshold
+cat("Optimal Threshold:", optimal_threshold, "\n")
+
+cat("Number of '1's predicted:", sum(predictions$predicted_classes), "\n")
+
+```
+
+#### Calibrated Model Metrics
+
+```{python echo=FALSE}
+
+from sklearn.metrics import (
+    roc_auc_score, 
+    brier_score_loss, 
+    accuracy_score, 
+    log_loss, 
+    f1_score, 
+    precision_score, 
+    recall_score, 
+    average_precision_score, 
+    confusion_matrix
+)
+import pandas as pd
+
+
+Y_Pred_Proba_Positive = model_auc.predict_proba(X_test)[:, 1]  # Probabilities of the positive class
+Y_Pred = r.predictions["predicted_classes"]  # Calibrated predictions from R
+
+# Calculate AUC (using probabilities)
+auc = roc_auc_score(Y_test, Y_Pred_Proba_Positive)
+
+# Calculate Brier Score (using probabilities)
+brier_score = brier_score_loss(Y_test, Y_Pred_Proba_Positive)
+
+# Calculate Accuracy (using binary predictions)
+accuracy = accuracy_score(Y_test, Y_Pred)
+
+# Calculate Log Loss (using probabilities)
+log_loss_value = log_loss(Y_test, Y_Pred_Proba_Positive)
+
+# Calculate F1 Score (using binary predictions)
+f1 = f1_score(Y_test, Y_Pred)
+
+# Calculate Precision (using binary predictions)
+precision = precision_score(Y_test, Y_Pred)
+
+# Calculate Recall (using binary predictions)
+recall = recall_score(Y_test, Y_Pred)
+
+# Calculate AUPR (using probabilities)
+aupr = average_precision_score(Y_test, Y_Pred_Proba_Positive)
+
+# Calculate Confusion Matrix (using binary predictions)
+conf_matrix = confusion_matrix(Y_test, Y_Pred)
+
+# Extract TN, FP, FN, TP from the confusion matrix
+tn, fp, fn, tp = conf_matrix.ravel()
+
+# Create a DataFrame with all metrics
+catboost_metrics_native = pd.DataFrame({
+    'Model': ['Native_Catboost'],
+    'AUC': [auc],  # AUC remains the same as it uses probabilities
+    'Brier Score': [brier_score],  # Brier Score uses probabilities
+    'Accuracy': [accuracy],  # Accuracy uses binary predictions
+    'Log Loss': [log_loss_value],  # Log Loss uses probabilities
+    'F1 Score': [f1],  # F1 Score uses binary predictions
+    'Precision': [precision],  # Precision uses binary predictions
+    'Recall': [recall],  # Recall uses binary predictions
+    'AUPR': [aupr],  # AUPR uses probabilities
+    'True Negative (TN)': [tn],  # Extracted TN
+    'False Positive (FP)': [fp],  # Extracted FP
+    'False Negative (FN)': [fn],  # Extracted FN
+    'True Positive (TP)': [tp]  # Extracted TP
+})
+
+print(catboost_metrics_native)
+
+```
+
+#### SHAP Feature Importance
+
+```{python native-model-feature-importance, echo=FALSE}
+
+import pandas as pd
+
+feature_names = model_auc.feature_names_
+
+# Calculate SAHP feature importance
+shap_feature_importance = model_auc.get_feature_importance(test_pool, type='ShapValues', prettified=True)
+
+# SHAP returns values for each instance, sum them to get feature importance
+shap_feature_importance_df = pd.DataFrame(shap_feature_importance).sum(axis=0)
+shap_feature_importance_df = shap_feature_importance_df[:-1]  # Exclude the last row which is the base value
+# Direction column for SHAP based on positive/negative sign
+shap_direction = ['+' if val >= 0 else '-' for val in shap_feature_importance_df.values]
+
+# Create pandas dataframe
+shap_df = pd.DataFrame({
+    'Feature Id': feature_names,
+    'Importances': shap_feature_importance_df.values,
+    'SHAP_Direction': shap_direction  # direction of SHAP values
+})
+
+
+shap_df['Feature Id'] = shap_df['Feature Id'].astype(str)
+
+
+# Rename columns to prevent conflicts during merge
+shap_df.rename(columns={'Importances': 'Importance_SHAP'}, inplace=True)
+
+```
+
+```{r feature-importances-native-model}
+
+# Retrieve the ranked comparison dataframe from Python
+shap_df <- py$shap_df
+
+# Convert the pandas dataframe to an R tibble
+shap_tbl <- as_tibble(shap_df) %>% 
+  mutate(SHAP_Importance = abs(Importance_SHAP)) %>% 
+  arrange(-SHAP_Importance)
+
+# Create a formatted table using huxtable, including the ranks for each method and the 'Direction' column
+shap_table <- shap_tbl %>%
+  rowid_to_column(var = "Overall Rank") %>%
+  select('Overall Rank', 'Feature Id', 
+         'Importance_SHAP', 'SHAP_Direction',
+         'SHAP_Importance'
+ ) 
+
+shap_table %>% 
+  DT::datatable(
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(
+        list(className = 'dt-center', targets = "_all")
+      )
+    )
+  )
+
+```
+
+
+### CatBoost - One Hot Encoding (Hybrid)
+
+- Train
+
+```{r echo=FALSE}
+one_hot_hybrid <- survival_model
+```
+
+```{r echo=FALSE}
+
+cat_features <- names(one_hot_hybrid)[sapply(one_hot_hybrid, is.factor)]
+
+cat_features
+
+```
+
+```{r echo=FALSE}
+
+hybrid_cat <- cat_features[c(2,3,8)]
+
+hybrid_cat
+```
+
+```{r echo=FALSE}
+
+# Create the dummy variables specification
+dummies <- dummyVars(~ ., data = one_hot_hybrid[, hybrid_cat], fullRank = FALSE)
+
+# Generate the dummy variables
+df_dummies <- predict(dummies, newdata = one_hot_hybrid)
+
+# Bind the new dummy variables with the original dataframe minus the original factor columns
+one_hot_hybrid <- cbind(one_hot_hybrid[, !(names(one_hot_hybrid) %in% hybrid_cat)], df_dummies)
+
+# Review the structure of the updated dataframe
+str(one_hot_hybrid)
+
+```
+
+
+```{r echo=FALSE}
+
+one_hot_hybrid %<>%
+  rename(
+    `CHD Surgery` = `Diag_Code.Congenital Heart Disease With Surgery`,
+    `CHD NoSurgery` = `Diag_Code.Congenital Heart Disease Without Surgery`,
+    DCM = `Diag_Code.Dilated Cardiomyopathy`,
+    HCM = `Diag_Code.Hypertrophic Cardiomyopathy`,
+    Myocard = Diag_Code.Myocarditis,
+    Other_Diag = Diag_Code.Other,
+    `Med Refusals` = Med_Refusals,
+    `Prop Refusals` = Prop_Refusals,
+    `Listing Ctr` = List_Ctr,
+    `Blood Type O` = Blood_Type.O,
+    `Txp Volume` = Prior_HRTX,
+    Ventilator = Vent_Reg,
+    RCM = `Diag_Code.Restrictive Cardiomyopathy`,
+    VHD = `Diag_Code.Valvular Heart Disease`
+  ) 
+
+# Replace any spaces or dots in column names with underscores
+names(one_hot_hybrid) <- gsub("[ .]", "_", names(one_hot_hybrid))
+
+# Review the structure of the updated dataframe
+str(one_hot_hybrid)
+
+```
+
+- Test
+
+```{r echo=FALSE}
+one_hot_hybrid_test <- survival_model_test
+```
+
+```{r echo=FALSE}
+
+cat_features <- names(one_hot_hybrid_test)[sapply(one_hot_hybrid_test, is.factor)]
+
+#cat_features
+
+```
+
+```{r echo=FALSE}
+
+hybrid_cat <- cat_features[c(2,3,8)]
+
+#hybrid_cat
+
+```
+
+```{r echo=FALSE}
+
+# Create the dummy variables specification
+dummies <- dummyVars(~ ., data = one_hot_hybrid_test[, hybrid_cat], fullRank = FALSE)
+
+# Generate the dummy variables
+df_dummies <- predict(dummies, newdata = one_hot_hybrid_test)
+
+# Bind the new dummy variables with the original dataframe minus the original factor columns
+one_hot_hybrid_test <- cbind(one_hot_hybrid_test[, !(names(one_hot_hybrid_test) %in% hybrid_cat)], df_dummies)
+
+# Review the structure of the updated dataframe
+#str(one_hot_hybrid_test)
+
+
+```
+
+```{r echo=FALSE}
+
+one_hot_hybrid_test %<>%
+ rename(
+    `CHD Surgery` = `Diag_Code.Congenital Heart Disease With Surgery`,
+    `CHD NoSurgery` = `Diag_Code.Congenital Heart Disease Without Surgery`,
+    DCM = `Diag_Code.Dilated Cardiomyopathy`,
+    HCM = `Diag_Code.Hypertrophic Cardiomyopathy`,
+    Myocard = Diag_Code.Myocarditis,
+    Other_Diag = Diag_Code.Other,
+    `Med Refusals` = Med_Refusals,
+    `Prop Refusals` = Prop_Refusals,
+    `Listing Ctr` = List_Ctr,
+    `Blood Type O` = Blood_Type.O,
+    `Txp Volume` = Prior_HRTX,
+    Ventilator = Vent_Reg,
+    RCM = `Diag_Code.Restrictive Cardiomyopathy`,
+    VHD = `Diag_Code.Valvular Heart Disease`
+  ) 
+
+# Replace any spaces or dots in column names with underscores
+names(one_hot_hybrid_test) <- gsub("[ .]", "_", names(one_hot_hybrid_test))
+
+# Review the structure of the updated dataframe
+#str(one_hot_hybrid_test)
+
+```
+
+### Hybrid CatBoost Model
+
+```{r echo=FALSE, eval=FALSE}
+# Sort the column names alphabetically for both training and test datasets
+train_columns_sorted <- sort(colnames(one_hot_hybrid))
+test_columns_sorted <- sort(colnames(one_hot_hybrid_test))
+
+# Check if the sorted column names match between training and test datasets
+if (identical(train_columns_sorted, test_columns_sorted)) {
+  print("Feature names match between the training and test datasets.")
+} else {
+  print("Feature names do not match between the training and test datasets.")
+  
+  # Find columns that are in the training set but not in the test set
+  train_only <- setdiff(train_columns_sorted, test_columns_sorted)
+  
+  # Find columns that are in the test set but not in the training set
+  test_only <- setdiff(test_columns_sorted, train_columns_sorted)
+  
+  print(paste("Columns in training but not in test:", toString(train_only)))
+  print(paste("Columns in test but not in training:", toString(test_only)))
+}
+
+```
+
+
+```{r echo=FALSE}
+
+# Get all unique columns from both training and test datasets
+all_columns <- union(colnames(one_hot_hybrid), colnames(one_hot_hybrid_test))
+
+# Add missing columns to the training set (with all values set to 0)
+missing_in_train <- setdiff(all_columns, colnames(one_hot_hybrid))
+for (col in missing_in_train) {
+  one_hot_hybrid[[col]] <- 0  # Add missing columns with all 0s
+}
+
+# Add missing columns to the test set (with all values set to 0)
+missing_in_test <- setdiff(all_columns, colnames(one_hot_hybrid_test))
+for (col in missing_in_test) {
+  one_hot_hybrid_test[[col]] <- 0  # Add missing columns with all 0s
+}
+
+# Reorder columns alphabetically to ensure they match
+one_hot_hybrid <- one_hot_hybrid[, sort(colnames(one_hot_hybrid))]
+one_hot_hybrid_test <- one_hot_hybrid_test[, sort(colnames(one_hot_hybrid_test))]
+
+```
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: true
+
+# Train
+hybrid_train_data <- one_hot_hybrid %>% 
+  select(-outcome)
+
+# Must be factor or numeric "Class"
+hybrid_train_target <- one_hot_hybrid %>% 
+  select(outcome) %>% 
+  dummify() %>% 
+  as.data.frame()
+
+hybrid_train_Y <- one_hot_hybrid$outcome
+
+
+# Test
+hybrid_test_data <- one_hot_hybrid_test %>% 
+  select(-outcome)
+
+# Must be factor or numeric "Class"
+hybrid_test_target <- one_hot_hybrid_test %>% 
+  select(outcome) %>% 
+  dummify() %>% 
+  as.data.frame()
+
+hybrid_test_Y <- one_hot_hybrid_test$outcome
+
+```
+
+```{python catboost-r-data-hybrid}
+
+#| echo: false
+#| warning: false
+#| message: false
+
+import numpy as np
+
+# initialize Train and Test datasets
+hybrid_X_train = r.hybrid_train_data
+hybrid_y_train = r.hybrid_train_Y
+hybrid_Y_train = np.array(hybrid_y_train)  
+
+hybrid_X_test = r.hybrid_test_data
+hybrid_y_test = r.hybrid_test_Y
+hybrid_Y_test = np.array(hybrid_y_test) 
+
+hybrid_cat_index = get_categorical_indexes(hybrid_X_train)
+
+```
+
+```{python echo=FALSE}
+
+# Compare feature names in training and test datasets
+train_columns = hybrid_X_train.columns
+test_columns = hybrid_X_test.columns
+
+# Check for differences
+differences = set(train_columns) ^ set(test_columns)  # Symmetric difference
+
+if differences:
+    print("Differences in columns between train and test datasets:", differences)
+else:
+    print("Feature names are consistent between training and test datasets.")
+
+```
+
+#### Data Cleansing  {.hidden .unnumbered .unlisted}
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+import pandas as pd
+
+# Convert NaN values to a string in categorical columns
+categorical_columns = [col for col in hybrid_X_train.columns if hybrid_X_train[col].dtype == 'object']
+hybrid_X_train[categorical_columns] = hybrid_X_train[categorical_columns].fillna('missing')
+
+
+# Convert NaN values to a string in categorical columns
+categorical_columns = [col for col in hybrid_X_test.columns if hybrid_X_test[col].dtype == 'object']
+hybrid_X_test[categorical_columns] = hybrid_X_test[categorical_columns].fillna('missing')
+
+```
+
+
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# NaN values in the column at index 131
+has_nan = hybrid_X_train.iloc[:, 37].isna().any()
+print("Column at index 37 contains NaN values:", has_nan)
+
+```
+ 
+ 
+```{python}
+#| echo: false
+#| warning: false
+#| message: false
+
+# Ensure the column at index 38 is categorical and "Missing" is added to categories
+if 'Missing' not in hybrid_X_train.iloc[:, 37].cat.categories:
+    hybrid_X_train.iloc[:, 37] = hybrid_X_train.iloc[:, 37].cat.add_categories(['Missing'])
+
+# Explicitly cast the column to a category type to ensure compatibility
+hybrid_X_train.iloc[:, 37] = hybrid_X_train.iloc[:, 37].astype('category')
+
+# Replace NaN values with the "Missing" category
+hybrid_X_train.iloc[:, 37] = hybrid_X_train.iloc[:, 37].fillna('Missing')
+
+
+```
+
+#### Optuna Hyperparameter Optimization
+
+```{python optuna-one-hot-hybrid, eval=FALSE, echo=FALSE}
+
+#| eval: false
+#| echo: false
+#| warning: false
+#| message: false
+
+import numpy as np
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import catboost as cb
+from catboost.utils import eval_metric
+import optuna
+
+
+def objective(trial):
+    # Parameter suggestions
+    params = {
+        "objective": "Logloss",
+        "iterations": 1000,
+        "early_stopping_rounds": 50,
+        "use_best_model": False,
+        "eval_metric":"AUC",
+        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3),
+        "depth": trial.suggest_int("depth", 1, 9),
+        "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.05, 1.0),
+        "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, 100),
+        "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1, 12),
+        "boosting_type": "Ordered",
+        "bootstrap_type": "MVS",
+        "early_stopping_rounds": 100
+    }
+
+    model = cb.CatBoostClassifier(**params)
+    train_pool = cb.Pool(hybrid_X_train, hybrid_Y_train, cat_features=get_categorical_indexes(hybrid_X_train))
+    cv_results = cb.cv(train_pool, params, fold_count=3, seed=3590, stratified=True, verbose=False)
+    return np.max(cv_results['test-AUC-mean'])
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=50, timeout=6000)
+
+print("Number of finished trials: {}".format(len(study.trials)))
+print("Best trial:")
+for key, value in study.best_trial.params.items():
+    print("  {}: {}".format(key, value))
+
+
+```
+
+#### Model
+
+-   From Optuna Trial #36/50 with value: 0.74
+
+```{python optuna-params3}
+
+model_params_hybrid = {
+    'learning_rate': 0.03,
+    'depth': 4,
+    'colsample_bylevel': 0.12,
+    'min_data_in_leaf': 44,
+    'l2_leaf_reg': 5.66
+}
+    
+```
+
+```{python catboost-model-one-hot-hybrid, echo=FALSE}
+
+#| eval: true
+#| echo: true
+#| message: false
+#| warning: false
+
+from sklearn.model_selection import train_test_split
+from catboost import CatBoostClassifier, Pool
+
+cat_indexes = get_categorical_indexes(hybrid_X_train)
+
+hybrid_model = CatBoostClassifier(
+                               objective='Logloss',
+                               iterations=1000,
+                               eval_metric='AUC',
+                               **model_params_hybrid, 
+                               boosting_type= 'Ordered',
+                               metric_period=500,
+                               bootstrap_type='MVS',
+                               early_stopping_rounds=50,
+                               use_best_model=False, 
+                               random_seed=1997)
+                               
+
+# Create a Pool object for the training and testing data
+train_pool = Pool(hybrid_X_train, cat_features=cat_indexes, label=hybrid_Y_train)
+test_pool = Pool(hybrid_X_test, cat_features=cat_indexes, label=hybrid_Y_test)
+
+hybrid_model.fit(train_pool, eval_set=test_pool)
+
+```
+
+#### Calibration Plot
+
+```{python}
+
+import pandas as pd
+
+Y_Pred_hybrid = hybrid_model.predict(hybrid_X_test)
+Y_Pred_Proba_hybrid = hybrid_model.predict_proba(hybrid_X_test)[:, 1]  # get the probabilities of the positive class
+
+
+Y_Pred_Proba_Positive_hybrid = hybrid_model.predict_proba(hybrid_X_test)[:, 1]  # Probabilities of the positive class
+Y_Pred_Proba_Negative_hybrid = hybrid_model.predict_proba(hybrid_X_test)[:, 0]  # Probabilities of the negative class
+
+# Converting predictions and actuals into a DataFrame for better readability, including negative class probabilities
+hybrid_predictions = pd.DataFrame({
+    'Prob_Negative_Class': Y_Pred_Proba_Negative_hybrid,
+    'Prob_Positive_Class': Y_Pred_Proba_Positive_hybrid,
+    'Predicted': Y_Pred_hybrid,
+    'Actual': hybrid_y_test
+})
+
+```
+
+
+```{r}
+
+hybrid_predictions <- py$hybrid_predictions %>% 
+  mutate(Class = ifelse(Actual == 0, "survive", "not_survive"),
+         .pred_not_survive = Prob_Positive_Class
+         )
+
+# Define the levels you want
+factor_levels <- c("survive", "not_survive")
+
+# Set the levels of the 'actuals' column
+hybrid_predictions$Class <- factor(hybrid_predictions$Class, levels = rev(factor_levels))
+
+hybrid_predictions %>% 
+  cal_plot_logistic(Class, .pred_not_survive)
+
+```
+
+#### Decision Threshold  {.hidden .unnumbered .unlisted}
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+
+# Calculate the ROC curve
+hybrid_roc_result <- roc(hybrid_predictions$Actual, hybrid_predictions$Prob_Positive_Class)
+
+hybrid_coords <- coords(hybrid_roc_result, "best", ret="threshold", best.method="closest.topleft")
+
+# Optimal threshold for maximizing true positive rate
+hybrid_optimal_threshold <- hybrid_coords$threshold
+
+# Apply the optimal threshold to convert probabilities to class predictions
+hybrid_predictions$predicted_classes <- ifelse(hybrid_predictions$Prob_Positive_Class >= optimal_threshold, 1, 0)
+
+# Output the optimal threshold
+cat("Optimal Threshold:", hybrid_optimal_threshold, "\n")
+
+cat("Number of '1's predicted:", sum(hybrid_predictions$predicted_classes), "\n")
+
+```
+
+#### Calibrated Model Metrics
+
+```{python model-metrics, echo=FALSE}
+
+from sklearn.metrics import (
+    roc_auc_score, 
+    brier_score_loss, 
+    accuracy_score, 
+    log_loss, 
+    f1_score, 
+    precision_score, 
+    recall_score, 
+    average_precision_score, 
+    confusion_matrix
+)
+import pandas as pd
+
+
+Y_Pred_Proba_Positive_hybrid = hybrid_model.predict_proba(hybrid_X_test)[:, 1]  # Probabilities of the positive class
+Y_Pred_hybrid = r.hybrid_predictions["predicted_classes"]  # Calibrated predictions from R
+
+# Calculate AUC (using probabilities)
+auc_hybrid = roc_auc_score(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
+
+# Calculate Brier Score (using probabilities)
+brier_score_hybrid = brier_score_loss(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
+
+# Calculate Accuracy (using binary predictions)
+accuracy_hybrid = accuracy_score(hybrid_y_test, Y_Pred_hybrid)
+
+# Calculate Log Loss (using probabilities)
+log_loss_value_hybrid = log_loss(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
+
+# Calculate F1 Score (using binary predictions)
+f1_hybrid = f1_score(hybrid_y_test, Y_Pred_hybrid)
+
+# Calculate Precision (using binary predictions)
+precision_hybrid = precision_score(hybrid_y_test, Y_Pred_hybrid)
+
+# Calculate Recall (using binary predictions)
+recall_hybrid = recall_score(hybrid_y_test, Y_Pred_hybrid)
+
+# Calculate AUPR (using probabilities)
+aupr_hybrid = average_precision_score(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
+
+# Calculate Confusion Matrix (using binary predictions)
+conf_matrix_hybrid = confusion_matrix(hybrid_y_test, Y_Pred_hybrid)
+
+# Extract TN, FP, FN, TP from the confusion matrix
+tn_hybrid, fp_hybrid, fn_hybrid, tp_hybrid = conf_matrix_hybrid.ravel()
+
+# Create a DataFrame with all metrics
+catboost_metrics_hybrid = pd.DataFrame({
+    'Model': ['Hybrid_Catboost'],
+    'AUC': [auc_hybrid],  # AUC remains the same as it uses probabilities
+    'Brier Score': [brier_score_hybrid],  # Brier Score uses probabilities
+    'Accuracy': [accuracy_hybrid],  # Accuracy uses binary predictions
+    'Log Loss': [log_loss_value_hybrid],  # Log Loss uses probabilities
+    'F1 Score': [f1_hybrid],  # F1 Score uses binary predictions
+    'Precision': [precision_hybrid],  # Precision uses binary predictions
+    'Recall': [recall_hybrid],  # Recall uses binary predictions
+    'AUPR': [aupr_hybrid],  # AUPR uses probabilities
+    'True Negative (TN)': [tn_hybrid],  # Extracted TN
+    'False Positive (FP)': [fp_hybrid],  # Extracted FP
+    'False Negative (FN)': [fn_hybrid],  # Extracted FN
+    'True Positive (TP)': [tp_hybrid]  # Extracted TP
+})
+
+print(catboost_metrics_hybrid)
+
+```
+
+#### Final Feature Importances
+
+```{python hybrid-model-feature-importance, echo=FALSE}
+
+import shap
+import pandas as pd
+import numpy as np
+
+explainer = shap.TreeExplainer(hybrid_model)
+shap_values = explainer(hybrid_X_train)
+
+# Calculate SHAP feature importance
+shap_importance = np.abs(shap_values.values).mean(0)
+
+# Get feature names
+final_feature_names = hybrid_X_train.columns.tolist()
+
+# Create DataFrame
+final_shap_df = pd.DataFrame({
+    'Feature Id': final_feature_names,
+    'Importance': shap_importance
+})
+
+# Sort by absolute importance
+final_shap_df['Importance'] = np.abs(final_shap_df['Importance'])
+final_shap_df = final_shap_df.sort_values('Importance', ascending=False).reset_index(drop=True)
+
+# Convert Feature Id to string
+final_shap_df['Feature Id'] = final_shap_df['Feature Id'].astype(str)
+
+```
+
+```{r feature-importances-hybrid-model}
+
+# Retrieve the ranked comparison dataframe from Python
+final_shap_df <- py$final_shap_df
+
+# Convert the pandas dataframe to an R tibble
+final_shap_tbl <- as_tibble(final_shap_df) %>% 
+  arrange(desc(Importance))
+
+# Create a formatted table using huxtable, including the ranks for each method and the 'Direction' column
+final_shap_table <- final_shap_tbl %>%
+  rowid_to_column(var = "Overall Rank") %>%
+  select('Feature Id', 'Importance') 
+
+final_shap_table %>% 
+  DT::datatable(
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(
+        list(className = 'dt-center', targets = "_all")
+      )
+    )
+  )
+
+```
+
+##### Cluster Function for Top Features
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+library(factoextra)
+
+fviz_nbclust(select(final_shap_df, Importance), kmeans, method = "wss")
+
+
+```
+```{r}
+
+# Function to cluster data based on optimal clusters
+final_clustering <- function(data, optimal_k) {
+  # Perform k-means clustering with the optimal number of clusters
+  kmeans_res <- kmeans(as.matrix(data), centers = optimal_k, nstart = 25)
+  return(kmeans_res$cluster)
+}
+
+optimal_k <- 3
+
+# Perform clustering using the optimal number of clusters
+final_shap_df <- final_shap_df %>%
+  mutate(Cluster = final_clustering(select(., Importance), optimal_k))
+
+# View the clustered data
+final_shap_df %>% 
+  DT::datatable(
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(
+        list(className = 'dt-center', targets = "_all")
+      )
+    )
+  )
+
+```
+
+'ECMO_Reg' is the cutoff feature based on WCSS (within-cluster sum of squares). However we can include a few more additional features that may be potential reasons for 'Med_Refusals' as we have several variables that are correlated. For this reason we will set final cutoff at 'Txp_Volume' or .02 value for Feature Importance.
+
+### CatBoost Model Accuracy Summary
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+final_model_accuracy_metrics <- rbind(py$catboost_metrics_native, py$catboost_metrics_hybrid )
+
+
+model_accuracy <- final_model_accuracy_metrics[1:9]
+
+model_confusion_matrix <- final_model_accuracy_metrics[c(1,10:13)]
+
+```
+
+```{r}
+
+model_accuracy
+
+```
+
+```{r}
+model_confusion_matrix
+```
+
+### SHAP Value Analysis
+
+
+```{python}
+
+feature_names = shap_values.feature_names
+
+# Replace '_' with ' ' in each feature name
+updated_feature_names = [name.replace('_', ' ') for name in feature_names]
+
+shap_values.feature_names = updated_feature_names
+
+```
+
+#### Mean Absolute Value Feature Importance
+
+```{r}
+
+library(ggplot2)
+library(plotly)
+library(dplyr)
+
+
+# ggplot bar chart object
+p <- ggplot(final_shap_df, aes(x = reorder(`Feature Id`, -Importance), y = Importance, fill = `Feature Id`)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = 0.02, linetype = "dashed", color = "red") +  # Add cutoff line
+  annotate("text", x = 33.5, y = 0.025, label = "Cutoff@0.02 (Txp_Volume)", color = "red", hjust = 0) +  # Add annotation
+  labs(title = "Sorted Mean Absolute SHAP Values", x = "Features", y = "Mean Absolute SHAP Value") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")  # Adjust text angle for better readability
+
+# Interactive plotly object
+p_interactive <- ggplotly(p, tooltip = c("x", "y"))  # Hover effects with tooltips for both feature name and value
+
+# Display the interactive plot
+p_interactive
+
+# Save the interactive plot as HTML
+htmlwidgets::saveWidget(p_interactive, "sorted_shap_values_interactive.html")
+
+```
+
+#### Beeswarm (Top Features - Categorical and Numerical)
+
+```{python, echo=FALSE, eval=FALSE}
+#| eval: false
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-shap-beeswarm-chart
+#| fig-cap: 
+#|   - "Beeswarm Summary Results"
+
+
+import matplotlib.pyplot as plt
+import shap
+
+plt.close()
+shap.initjs()
+shap.summary_plot(shap_values, hybrid_X_train, max_display=19)
+plt.tight_layout()
+plt.savefig('images/catboost_beeswarm.png', dpi=1200)
+plt.close()
+
+```
+
+![Beeswarm Chart](images/catboost_beeswarm.png){#fig-shap-beeswarm-chart}
+
+#### Bar Chart for Feature Importance
+
+```{python}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+
+mean_abs_shap_values = np.mean(np.abs(shap_values.values), axis=0)
+
+top_n = 19
+top_indices = np.argsort(-mean_abs_shap_values)[:top_n]  # Indices of the top features
+
+# filtered SHAP object with top N features
+filtered_shap_values = shap.Explanation(
+    shap_values.values[:, top_indices],
+    base_values=shap_values.base_values,
+    data=shap_values.data[:, top_indices],
+    feature_names=np.array(shap_values.feature_names)[top_indices]
+)
+
+
+```
+
+```{python shapley-bar-chart}
+#| eval: false
+#| echo: false
+#| warning: false
+#| message: false
+#| label: fig-shap-bar-chart
+#| fig-cap: 
+#|   - "Net Effect"
+
+import matplotlib.pyplot as plt
+import shap
+
+plt.close()
+
+shap.initjs()
+
+shap.plots.bar(filtered_shap_values, max_display=19)
+
+plt.tight_layout()
+
+# Save the image in high resolution
+plt.savefig('images/shapley_bar_one_hot.png', dpi=1200)
+
+plt.close()
+
+
+```
+
+![Feature Importance Chart](images/shapley_bar_one_hot.png){#fig-shap-bar-chart}
+
+#### Beeswarm Top Numerical Features
+
+```{python}
+#| eval: true
+#| echo: false
+#| warning: false
+#| message: false
+
+
+# Get the list of all columns
+all_columns = hybrid_X_train.columns.tolist()
+
+# Function to check if a column is one-hot encoded
+def is_one_hot_encoded(column):
+    unique_values = hybrid_X_train[column].unique()
+    return set(unique_values).issubset({0, 1}) and len(unique_values) <= 2
+
+# Select numerical features that are not one-hot encoded
+num_features = [col for col in all_columns if hybrid_X_train[col].dtype in ['int64', 'float64'] and not is_one_hot_encoded(col)]
+#print("Numerical Features:", num_features)
+
+# Get the indices of numerical features
+num_feature_indices = [hybrid_X_train.columns.get_loc(col) for col in num_features]
+#print("Indices of Numerical Features:", num_feature_indices)
+
+
+```
+
+
+```{python beeswarm-numerical-features}
+#| eval: false
+#| echo: false
+#| warning: false
+#| message: false
+#| out-width: 70%
+#| out-height: 70%
+#| fig-cap: 
+#|   - "Beeswarm Numerical Effects"
+
+import matplotlib.pyplot as plt
+import shap
+import pickle
+
+shap.initjs()
+
+plt.close()
+
+
+# Subset the SHAP values to only include the numerical features
+numerical_shap_values = shap_values[:, num_feature_indices]
+
+# Plot the beeswarm for only the numerical features
+shap.plots.beeswarm(numerical_shap_values, max_display=19)
+
+plt.tight_layout()
+
+# Save the figure with desired DPI
+plt.savefig('images/shapley_beeswarm_numerical.png', dpi=1200, bbox_inches="tight")
+
+plt.close()
+
+
+```
+
+![Numerical Beeswarm Chart](images/shapley_beeswarm_numerical.png){#fig-shap-numerical-beeswarm-chart}
+
+#### Feature Importance Correlation Plot
+
+```{python correlation-plot}
+#| eval: false
+#| echo: false
+#| warning: false
+#| message: false
+#| out-width: 70%
+#| out-height: 70%
+#| fig-cap: 
+#|   - "SHAP Value Correlation Plot"
+
+plt.close()
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# SHAP correlation plot
+corr_matrix = pd.DataFrame(numerical_shap_values.values, columns=num_features).corr()
+
+sns.set(font_scale=.5)
+sns.heatmap(corr_matrix,cmap="coolwarm", center=0, annot=True, fmt =".1g")
+
+plt.tight_layout()
+
+# Save the figure with desired DPI
+plt.savefig('images/shap_correlation_plot.png', dpi=1200, bbox_inches="tight")
+
+plt.close()
+
+
+```
+
+![SHAP Value Correlation Plot](images/shap_correlation_plot.png){#fig-shap-correlation-plot}
+
+### SHAP Partial Dependence Plots
+
+[SHAP Partial Dependence Plots](https://virginia.box.com/v/survival-analysis-shap-pdp)
+
+```{python eval=FALSE, echo=FALSE}
+
+shap_values_pdp = explainer(hybrid_X_test)
+
+```
+
+
+```{python eval=FALSE, echo=FALSE}
+
+pdp_shap_values = shap_values_pdp.values
+
+pdp_shap_data = shap_values_pdp.data
+
+pdp_feature_names = updated_feature_names
+
+```
+
+
+```{r eval=FALSE, echo=FALSE}
+
+pdp_shap_df <- as.data.frame(py$pdp_shap_values)
+pdp_data_df <- as.data.frame(py$pdp_shap_data) %>% 
+  unnest(cols = c(V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12,
+  V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26,
+  V27, V28, V29, V30, V31, V32, V33, V34, V35, V36, V37, V38, V39, V40,
+  V41, V42, V43))
+
+colnames(pdp_shap_df) <- py$pdp_feature_names
+colnames(pdp_data_df) <- py$pdp_feature_names
+
+```
+
+#### Numeric Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r eval=FALSE}
+
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+library(units)
+
+create_pdp_numeric <- function(feature_name, pdp_data_df, pdp_shap_df, save_plots = TRUE) {
+  
+  # Set the threshold for outlier removal based on Z-score
+  threshold <- 3
+  
+  # Check if the feature is present in both test_data and pdp_shap_data
+  if (!feature_name %in% colnames(pdp_data_df) || !feature_name %in% colnames(pdp_shap_df)){
+    stop(paste("Feature", feature_name, "not found in the data."))
+  }
+  
+  # Dataframe for the feature values and corresponding SHAP values
+  pdp_shap_data_feature <- data.frame(
+    feature_value = pdp_data_df[[feature_name]],  # Original feature values
+    shap_value = pdp_shap_df[[feature_name]]  # SHAP values
+  )
+  
+  # Remove rows with NA values in either feature_value or shap_value
+  pdp_shap_data_feature <- na.omit(pdp_shap_data_feature)
+  
+  if (feature_name == 'eGFR'){
+    pdp_shap_data_feature <- pdp_shap_data_feature[pdp_shap_data_feature$feature_value < 400, ]
+  }
+  
+  # Define unit labels for axis titles only
+  unit_labels <- list(
+    eGFR = "ml/min/1.73m^2",
+    Albumin = "g/dL",
+    Height = "cm",
+    Weight = "kgs",
+    Age = "years",
+    BSA = "m^2",
+    BMI = "kg/m^2"
+  )
+  
+  # Get the appropriate unit label for the feature
+  unit_label <- unit_labels[[feature_name]]
+  
+  # Scatter plot using ggplot2
+  scatter_plot <- ggplot(pdp_shap_data_feature, aes(x = feature_value, y = shap_value)) +
+    geom_point(color = 'blue', alpha = 0.6) + 
+    scale_x_continuous(breaks = function(x) pretty(x, n = 10)) +
+    scale_y_continuous() +  
+    labs(x = if (!is.null(unit_label) && unit_label != "") 
+           paste(feature_name, " Values (", unit_label, ")", sep = "") 
+         else 
+           paste(feature_name, "Values"),
+       y = "SHAP Values",
+       title = paste("SHAP Partial Dependency Plot for", feature_name)) +
+  theme_minimal()  
+  
+  # Create marginal histogram for the bottom (x-axis)
+  histogram_plot <- ggplot(pdp_shap_data_feature, aes(x = feature_value)) +
+    geom_histogram(fill = "grey", bins = 30) +
+    theme_minimal() +
+    labs(x = paste(feature_name, "Values (", unit_label, ")", sep = ""), y = "Count")
+  
+  # Remove axis labels, ticks, and gridlines from the histogram to clean up appearance
+  histogram_plot <- histogram_plot +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      panel.grid = element_blank(), 
+      plot.margin = margin(5, 5, 5, 5)
+    )
+  
+  combined_plot <- scatter_plot / histogram_plot + plot_layout(heights = c(20, 1))
+  
+  # Display the plot
+  print(combined_plot)
+  
+  # Save the plot as a PNG file
+  if (save_plots) {
+    ggsave(paste0("images/dependence_plots/shap_plot_numeric_", feature_name, ".png"), combined_plot)
+  }
+}
+```
+
+```{r eval=FALSE}
+
+feature_to_plot <- "List Yr" 
+
+create_pdp_numeric(feature_to_plot, pdp_data_df, pdp_shap_df, save_plots = TRUE)
+
+```
+
+#### Categorical Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r eval=FALSE}
+
+library(ggplot2)
+library(dplyr)
+
+# Function to create a partial dependency plot for categorical features
+create_pdp_categorical <- function(feature_name, pdp_data_df, pdp_shap_df, save_plot = TRUE, plot_width = 5, plot_height = 4) {
+  
+  # Check if the feature is present in both test_data and pdp_shap_data
+  if (!feature_name %in% colnames(pdp_data_df) || !feature_name %in% colnames(pdp_shap_df)) {
+    stop(paste("Feature", feature_name, "not found in the data."))
+  }
+  
+  # Create a dataframe for the feature values and corresponding SHAP values
+  pdp_shap_data_feature <- data.frame(
+    feature_value = pdp_data_df[[feature_name]],  # Actual feature values (categories)
+    shap_value = pdp_shap_df[[feature_name]]  # Corresponding SHAP values
+  )
+  
+  # Define unit labels for axis titles only
+  cat_labels <- list(
+    DCM = "Dilated Cardiomyopathy",
+    HCM = "Hypertrophic Cardiomyopathy",
+    ECMO = "ECMO Cardiogram",
+    RCM = "Restrictive Cardiomyopathy",
+    Myocard = "Myocardium",
+    Defib = "Defibrillator",
+   `VAD REG` = "Ventricular Assist Device (VAD) at Registration",
+   `VAD TCR` = "Ventricular Assist Device (VAD) at Listing",
+    VHD = "Valvular Heart Disease (VHD)",
+   `XMatch Req` = "Transplant Match Requested"
+  )
+  
+  # Get the appropriate unit label for the feature
+  cat_label <- cat_labels[[feature_name]]
+  
+  # Calculate the mean SHAP value for each category
+  pdp_shap_summary <- pdp_shap_data_feature %>%
+    group_by(feature_value) %>%
+    summarize(mean_shap = mean(shap_value, na.rm = TRUE), .groups = 'drop')
+  
+  # Create the plot
+  plot <- ggplot(pdp_shap_summary, aes(x = reorder(feature_value, mean_shap), y = mean_shap, fill = feature_value)) +
+    geom_bar(stat = "identity", show.legend = FALSE) +
+    
+    # Set axis labels and title
+    labs(
+      x = if (!is.null(cat_label) && cat_label != "") 
+           cat_label 
+         else 
+           paste(feature_name, "Categories"),
+      y = "Mean SHAP Value",
+      title = paste("Partial Dependency Plot for", feature_name)
+    ) +
+    
+    # Apply minimal theme and customize appearance
+    theme_minimal() +
+    theme(
+      panel.grid = element_blank(),  # Remove gridlines if desired
+      axis.text.x = if (feature_name == "Listing Ctr") element_blank() else element_text(angle = 45, hjust = 1),
+      axis.title.x = if (feature_name == "Listing Ctr") element_blank() else element_text(),
+      axis.ticks.x = if (feature_name == "Listing Ctr") element_blank() else element_line(),
+      axis.text.y = element_text(),
+      axis.title.y = element_text()
+    )
+  
+  # Display the plot
+  print(plot)
+  
+  # Save the plot if required
+  if (save_plot) {
+    ggsave(paste0("images/dependence_plots/shap_plot_categorical_", feature_name, ".png"), plot, width = plot_width, height = plot_height)
+  }
+}
+
+```
+
+```{r eval=FALSE}
+create_pdp_categorical("VAD TCR", pdp_data_df, pdp_shap_df)
+```
+
+#### Final Shap Value Partial Dependency  Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r eval=FALSE}
+
+# Function to determine the type of feature and call the appropriate plotting function for multiple features
+create_shap_pdp_plots <- function(feature_names, pdp_data_df, pdp_shap_data, save_plots = TRUE) {
+  
+  # Loop over each feature in the feature_names list
+  for (feature_name in feature_names) {
+    
+    # Check if the feature is present in test_data
+    if (!feature_name %in% colnames(pdp_data_df)) {
+      message(paste("Feature", feature_name, "not found in the data. Skipping..."))
+      next  # Skip this feature if not found
+    }
+    
+    # Determine if the feature is numeric or categorical
+    if (is.numeric(pdp_data_df[[feature_name]])) {
+      # If numeric, call the numeric plotting function
+      create_pdp_numeric(feature_name, pdp_data_df, pdp_shap_data, save_plots = TRUE)
+    } else if (is.factor(pdp_data_df[[feature_name]]) || is.character(pdp_data_df[[feature_name]])) {
+      # If categorical, call the categorical plotting function
+      create_pdp_categorical(feature_name, pdp_data_df, pdp_shap_data, save_plot = TRUE, plot_width = 5, plot_height = 4)
+    } else {
+      message(paste("Unsupported data type for feature:", feature_name, "Skipping..."))
+    }
+  }
+}
+
+
+```
+
+```{r eval=FALSE}
+
+features <- py$updated_feature_names
+features
+```
+
+
+```{r eval=FALSE}
+create_shap_pdp_plots(features, pdp_data_df, pdp_shap_df, save_plots = TRUE)
+```
