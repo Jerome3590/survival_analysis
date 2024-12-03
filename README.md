@@ -6,7 +6,7 @@ This repository contains a comprehensive survival analysis project focusing on m
 
 survival_analysis/  
 │  
-├── [survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.  amazonaws.com/survival_analysis_final_catboost_model.html)
+├── survival_analysis_final_catboost_model.qmd  
 ├── eda/  
 │ ├── center-stats.qmd  
 │ ├── listing-mortality-prediction.qmd  
