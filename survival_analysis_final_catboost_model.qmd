@@ -1371,6 +1371,8 @@ fviz_nbclust(select(final_shap_df, Importance), kmeans, method = "wss")
 
 
 ```
+
+
 ```{r}
 
 # Function to cluster data based on optimal clusters
