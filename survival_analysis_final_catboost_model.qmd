@@ -1,5 +1,5 @@
 ---
-title: "Survival Analysis: CatBoost"
+title: "Survival Analysis: Final Selected CatBoost Model"
 author: "R. Jerome Dixon"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 format:
@@ -76,6 +76,7 @@ hash_numeric_string_to_letters <- Vectorize(function(input_str) {
 ```
 
 ```{r load-dataset}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -335,6 +336,7 @@ cat_features_test <- names(survival_model_test)[sapply(survival_model_test, is.f
 #### Utility Function for Categorical Indexes  {.hidden .unnumbered .unlisted}
 
 ```{python}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -354,6 +356,7 @@ def get_categorical_indexes(X_train):
 ### Native CatBoost Model
 
 ```{r}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -411,6 +414,7 @@ cat_index2 = get_categorical_indexes(X_test)
 #### Data Cleansing  {.hidden .unnumbered .unlisted}
 
 ```{python}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -429,6 +433,7 @@ X_test[categorical_columns] = X_test[categorical_columns].fillna('missing')
 ```
 
 ```{python}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -442,6 +447,7 @@ print("Column at index 11 contains NaN values:", has_nan)
  - Clean/Fix index 11
  
 ```{python}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -763,7 +769,7 @@ shap_table %>%
 
 ### CatBoost - One Hot Encoding (Hybrid)
 
-- Train
+- Train Dataset
 
 ```{r echo=FALSE}
 one_hot_hybrid <- survival_model
@@ -829,7 +835,7 @@ str(one_hot_hybrid)
 
 ```
 
-- Test
+- Test Dataset
 
 ```{r echo=FALSE}
 one_hot_hybrid_test <- survival_model_test
@@ -1038,6 +1044,7 @@ hybrid_X_test[categorical_columns] = hybrid_X_test[categorical_columns].fillna('
 
 
 ```{python}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -1050,6 +1057,7 @@ print("Column at index 37 contains NaN values:", has_nan)
  
  
 ```{python}
+
 #| echo: false
 #| warning: false
 #| message: false
@@ -1118,7 +1126,7 @@ for key, value in study.best_trial.params.items():
 
 ```
 
-#### Model
+#### Final Selected Model
 
 -   From Optuna Trial #36/50 with value: 0.74
 
