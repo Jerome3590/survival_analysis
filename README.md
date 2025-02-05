@@ -6,7 +6,8 @@ This repository contains a comprehensive survival analysis project focusing on m
 
 survival_analysis/  
 │  
-├── survival_analysis_final_catboost_model.qmd  
+├── survival_analysis_final_catboost_model.qmd (final model)  
+├── listing-mortality-prediction.qmd (various models)  
 ├── eda/  
 │ ├── center-stats.qmd  
 │ ├── listing-mortality-prediction.qmd  
