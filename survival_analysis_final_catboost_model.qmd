@@ -13,6 +13,8 @@ format:
     dpi: 600
 ---
 
+### Libraries
+
 ```{r load-libraries}
 #| echo: false
 #| warning: false
@@ -44,9 +46,9 @@ library(digest)
 
 ```
 
-### Survival Model Dataset  {.hidden .unnumbered .unlisted}
+### Survival Model Dataset {.hidden .unnumbered .unlisted}
 
-```{r echo=FALSE}  
+```{r echo=FALSE}
 
 hash_numeric_string_to_letters <- Vectorize(function(input_str) {
   # Ensure the input is a numeric string
@@ -320,7 +322,6 @@ ht
 
 ```
 
-
 ```{r echo=FALSE}
 
 cat_features_train <- names(survival_model)[sapply(survival_model, is.factor)]
@@ -333,7 +334,7 @@ cat_features_test <- names(survival_model_test)[sapply(survival_model_test, is.f
 
 ```
 
-#### Utility Function for Categorical Indexes  {.hidden .unnumbered .unlisted}
+#### Utility Function for Categorical Indexes {.hidden .unnumbered .unlisted}
 
 ```{python}
 
@@ -342,14 +343,13 @@ cat_features_test <- names(survival_model_test)[sapply(survival_model_test, is.f
 #| message: false
 #| eval: true
 
+import pandas as pd
+
 def get_categorical_indexes(X_train):
-    # Select columns with object or categorical dtype
-    categorical_columns = X_train.select_dtypes(include=['object', 'category'])
+    if not isinstance(X_train, pd.DataFrame):
+        raise ValueError("Input must be a pandas DataFrame")
+    return [i for i, col in enumerate(X_train.columns) if X_train[col].dtype in ['object', 'category']]
 
-    # Get the column indexes of categorical variables
-    categorical_indexes = [X_train.columns.get_loc(col) for col in categorical_columns]
-
-    return categorical_indexes
 
 ```
 
@@ -411,15 +411,13 @@ cat_index2 = get_categorical_indexes(X_test)
 
 ```
 
-#### Data Cleansing  {.hidden .unnumbered .unlisted}
+#### Data Cleansing {.hidden .unnumbered .unlisted}
 
 ```{python}
 
 #| echo: false
 #| warning: false
 #| message: false
-
-import pandas as pd
 
 # Convert NaN values to a string in categorical columns
 categorical_columns = [col for col in X_train.columns if X_train[col].dtype == 'object']
@@ -443,9 +441,9 @@ has_nan = X_train.iloc[:, 11].isna().any()
 print("Column at index 11 contains NaN values:", has_nan)
 
 ```
- 
- - Clean/Fix index 11
- 
+
+-   Clean/Fix index 11
+
 ```{python}
 
 #| echo: false
@@ -465,7 +463,7 @@ X_train.iloc[:, 11] = X_train.iloc[:, 11].fillna('Missing')
 
 ```
 
-#### Optuna Hyperparameter Optimization 
+#### Optuna Hyperparameter Optimization
 
 ```{python optuna-native-model, eval=FALSE, echo=FALSE}
 
@@ -517,21 +515,21 @@ for key, value in study.best_trial.params.items():
 
 ```
 
--   Best is trial #12/50 with value: 0.74
+-   Best is trial #19/50 with value: 0.74
+
+#### Model
 
 ```{python optuna-params1}
 
 model_params_native = {
-    'learning_rate': 0.15,
-    'depth': 8,
-    'colsample_bylevel': 0.75,
-    'min_data_in_leaf': 95,
-    'l2_leaf_reg': 10.54
+    'learning_rate': 0.08,
+    'depth': 7,
+    'colsample_bylevel': 0.87,
+    'min_data_in_leaf': 82,
+    'l2_leaf_reg': 7.61
 }
     
 ```
-
-#### Model
 
 ```{python catboost-model-auc}
 
@@ -590,7 +588,6 @@ predictions = pd.DataFrame({
 
 ```
 
-
 ```{r echo=FALSE}
 
 predictions <- py$predictions %>% 
@@ -609,7 +606,7 @@ predictions %>%
 
 ```
 
-#### Decision Threshold  {.hidden .unnumbered .unlisted}
+#### Decision Threshold {.hidden .unnumbered .unlisted}
 
 ```{r message=FALSE, warning=FALSE, echo=FALSE}
 
@@ -766,10 +763,9 @@ shap_table %>%
 
 ```
 
-
 ### CatBoost - One Hot Encoding (Hybrid)
 
-- Train Dataset
+-   Train Dataset
 
 ```{r echo=FALSE}
 one_hot_hybrid <- survival_model
@@ -806,7 +802,6 @@ str(one_hot_hybrid)
 
 ```
 
-
 ```{r echo=FALSE}
 
 one_hot_hybrid %<>%
@@ -835,7 +830,7 @@ str(one_hot_hybrid)
 
 ```
 
-- Test Dataset
+-   Test Dataset
 
 ```{r echo=FALSE}
 one_hot_hybrid_test <- survival_model_test
@@ -905,6 +900,7 @@ names(one_hot_hybrid_test) <- gsub("[ .]", "_", names(one_hot_hybrid_test))
 ### Hybrid CatBoost Model
 
 ```{r echo=FALSE, eval=FALSE}
+
 # Sort the column names alphabetically for both training and test datasets
 train_columns_sorted <- sort(colnames(one_hot_hybrid))
 test_columns_sorted <- sort(colnames(one_hot_hybrid_test))
@@ -926,7 +922,6 @@ if (identical(train_columns_sorted, test_columns_sorted)) {
 }
 
 ```
-
 
 ```{r echo=FALSE}
 
@@ -950,7 +945,6 @@ one_hot_hybrid <- one_hot_hybrid[, sort(colnames(one_hot_hybrid))]
 one_hot_hybrid_test <- one_hot_hybrid_test[, sort(colnames(one_hot_hybrid_test))]
 
 ```
-
 
 ```{r}
 #| echo: false
@@ -1022,7 +1016,7 @@ else:
 
 ```
 
-#### Data Cleansing  {.hidden .unnumbered .unlisted}
+#### Data Cleansing {.hidden .unnumbered .unlisted}
 
 ```{python}
 #| echo: false
@@ -1042,7 +1036,6 @@ hybrid_X_test[categorical_columns] = hybrid_X_test[categorical_columns].fillna('
 
 ```
 
-
 ```{python}
 
 #| echo: false
@@ -1054,8 +1047,7 @@ has_nan = hybrid_X_train.iloc[:, 37].isna().any()
 print("Column at index 37 contains NaN values:", has_nan)
 
 ```
- 
- 
+
 ```{python}
 
 #| echo: false
@@ -1128,16 +1120,16 @@ for key, value in study.best_trial.params.items():
 
 #### Final Selected Model
 
--   From Optuna Trial #36/50 with value: 0.74
+-   From Optuna Trial #12/50 with value: 0.742
 
 ```{python optuna-params3}
 
 model_params_hybrid = {
-    'learning_rate': 0.03,
-    'depth': 4,
-    'colsample_bylevel': 0.12,
-    'min_data_in_leaf': 44,
-    'l2_leaf_reg': 5.66
+    'learning_rate': 0.04,
+    'depth': 3,
+    'colsample_bylevel': 0.05,
+    'min_data_in_leaf': 98,
+    'l2_leaf_reg': 11.95
 }
     
 ```
@@ -1198,7 +1190,6 @@ hybrid_predictions = pd.DataFrame({
 
 ```
 
-
 ```{r}
 
 hybrid_predictions <- py$hybrid_predictions %>% 
@@ -1217,7 +1208,7 @@ hybrid_predictions %>%
 
 ```
 
-#### Decision Threshold  {.hidden .unnumbered .unlisted}
+#### Decision Threshold {.hidden .unnumbered .unlisted}
 
 ```{r message=FALSE, warning=FALSE, echo=FALSE}
 
@@ -1258,7 +1249,8 @@ import pandas as pd
 
 
 Y_Pred_Proba_Positive_hybrid = hybrid_model.predict_proba(hybrid_X_test)[:, 1]  # Probabilities of the positive class
-Y_Pred_hybrid = r.hybrid_predictions["predicted_classes"]  # Calibrated predictions from R
+
+Y_PRED_HYBRID = r.hybrid_predictions["predicted_classes"]  # Calibrated predictions from R
 
 # Calculate AUC (using probabilities)
 auc_hybrid = roc_auc_score(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
@@ -1267,25 +1259,25 @@ auc_hybrid = roc_auc_score(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
 brier_score_hybrid = brier_score_loss(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
 
 # Calculate Accuracy (using binary predictions)
-accuracy_hybrid = accuracy_score(hybrid_y_test, Y_Pred_hybrid)
+accuracy_hybrid = accuracy_score(hybrid_y_test, Y_PRED_HYBRID)
 
 # Calculate Log Loss (using probabilities)
 log_loss_value_hybrid = log_loss(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
 
 # Calculate F1 Score (using binary predictions)
-f1_hybrid = f1_score(hybrid_y_test, Y_Pred_hybrid)
+f1_hybrid = f1_score(hybrid_y_test, Y_PRED_HYBRID)
 
 # Calculate Precision (using binary predictions)
-precision_hybrid = precision_score(hybrid_y_test, Y_Pred_hybrid)
+precision_hybrid = precision_score(hybrid_y_test, Y_PRED_HYBRID)
 
 # Calculate Recall (using binary predictions)
-recall_hybrid = recall_score(hybrid_y_test, Y_Pred_hybrid)
+recall_hybrid = recall_score(hybrid_y_test, Y_PRED_HYBRID)
 
 # Calculate AUPR (using probabilities)
 aupr_hybrid = average_precision_score(hybrid_y_test, Y_Pred_Proba_Positive_hybrid)
 
 # Calculate Confusion Matrix (using binary predictions)
-conf_matrix_hybrid = confusion_matrix(hybrid_y_test, Y_Pred_hybrid)
+conf_matrix_hybrid = confusion_matrix(hybrid_y_test, Y_PRED_HYBRID)
 
 # Extract TN, FP, FN, TP from the confusion matrix
 tn_hybrid, fp_hybrid, fn_hybrid, tp_hybrid = conf_matrix_hybrid.ravel()
@@ -1380,7 +1372,6 @@ fviz_nbclust(select(final_shap_df, Importance), kmeans, method = "wss")
 
 ```
 
-
 ```{r}
 
 # Function to cluster data based on optimal clusters
@@ -1438,7 +1429,6 @@ model_confusion_matrix
 ```
 
 ### SHAP Value Analysis
-
 
 ```{python}
 
@@ -1588,7 +1578,6 @@ num_feature_indices = [hybrid_X_train.columns.get_loc(col) for col in num_featur
 
 ```
 
-
 ```{python beeswarm-numerical-features}
 #| eval: false
 #| echo: false
@@ -1671,7 +1660,6 @@ shap_values_pdp = explainer(hybrid_X_test)
 
 ```
 
-
 ```{python eval=FALSE, echo=FALSE}
 
 pdp_shap_values = shap_values_pdp.values
@@ -1681,7 +1669,6 @@ pdp_shap_data = shap_values_pdp.data
 pdp_feature_names = updated_feature_names
 
 ```
-
 
 ```{r eval=FALSE, echo=FALSE}
 
@@ -1878,7 +1865,7 @@ create_pdp_categorical <- function(feature_name, pdp_data_df, pdp_shap_df, save_
 create_pdp_categorical("VAD TCR", pdp_data_df, pdp_shap_df)
 ```
 
-#### Final Shap Value Partial Dependency  Plotting Function {.hidden .unnumbered .unlisted}
+#### Final Shap Value Partial Dependency Plotting Function {.hidden .unnumbered .unlisted}
 
 ```{r eval=FALSE}
 
@@ -1916,7 +1903,138 @@ features <- py$updated_feature_names
 features
 ```
 
-
 ```{r eval=FALSE}
 create_shap_pdp_plots(features, pdp_data_df, pdp_shap_df, save_plots = TRUE)
+```
+
+### Stratified Model Accuracy Metrics
+
+```{python}
+
+import pandas as pd
+import numpy as np
+from sklearn.metrics import roc_auc_score, log_loss, average_precision_score, accuracy_score, precision_score
+
+# Convert to Series
+Y_PRED_HYBRID_series = pd.Series(Y_PRED_HYBRID)
+Y_Pred_Proba_Positive_hybrid_series = pd.Series(Y_Pred_Proba_Positive_hybrid)
+
+# Convert from list to DataFrame
+HYBRID_Y_TEST_DF = pd.DataFrame({"y_true": hybrid_y_test}, index=hybrid_X_test.index)
+
+# Ensure index consistency across all datasets
+hybrid_X_test.index = hybrid_X_test.index.astype(str)
+Y_PRED_HYBRID_series.index = Y_PRED_HYBRID_series.index.astype(str)
+Y_Pred_Proba_Positive_hybrid_series.index = Y_Pred_Proba_Positive_hybrid_series.index.astype(str)
+HYBRID_Y_TEST_DF.index = HYBRID_Y_TEST_DF.index.astype(str)
+
+# List of categorical features
+one_hot_columns = [
+    'Blood_Type_A', 'Blood_Type_AB', 'Blood_Type_B', 'Blood_Type_O',
+    'Cereb_Vasc', 'CHD_NoSurgery', 'CHD_Surgery', "DCM", "Diabetes",
+    "Dialysis", "ECMO_Reg", "Gender", "Inotrop", "Myocard",
+    'Race_Asian', 'Race_Black', 'Race_Hispanic', 'Race_Other', 'Race_White',
+    "VAD", "Ventilator"
+]
+
+# Create an empty list to store results
+stratified_metrics = []
+
+# Loop through each categorical feature
+for col in one_hot_columns:
+
+    mask = hybrid_X_test.loc[:, col] == 1  # Boolean mask for this category
+    mask = mask[mask].index  # Get indices where mask is True
+
+    if len(mask) == 0:
+        continue  # Skip if no samples for this group
+
+    # Ensure only valid indices exist in Y_PRED_HYBRID_series
+    valid_idx = mask.intersection(Y_PRED_HYBRID_series.index)
+    missing_idx = mask.difference(Y_PRED_HYBRID_series.index)
+
+    # Subset using only valid indices
+    y_true_subset = HYBRID_Y_TEST_DF.loc[valid_idx, "y_true"]
+    y_pred_proba_subset = Y_Pred_Proba_Positive_hybrid_series.loc[valid_idx]
+    y_pred_subset = Y_PRED_HYBRID_series.loc[valid_idx]
+
+    # Drop NaNs if they exist in any subset
+    non_nan_idx = y_true_subset.dropna().index  # Get non-NaN indices
+    y_true_subset = y_true_subset.loc[non_nan_idx]
+    y_pred_proba_subset = y_pred_proba_subset.loc[non_nan_idx]
+    y_pred_subset = y_pred_subset.loc[non_nan_idx]
+
+    if y_pred_subset.isnull().sum() > 0:
+        print(f"⚠️ Warning: {y_pred_subset.isnull().sum()} NaN values found in y_pred_subset for {col}, skipping this feature...")
+        continue
+
+    # Compute metrics only if at least 2 unique values exist
+    if len(set(y_true_subset)) > 1:
+        auc = roc_auc_score(y_true_subset, y_pred_proba_subset)
+        logloss = log_loss(y_true_subset, y_pred_proba_subset)
+        aupr = average_precision_score(y_true_subset, y_pred_proba_subset)
+        sample_size = len(y_true_subset)
+    else:
+        auc, logloss, aupr = np.nan, np.nan, np.nan
+
+    accuracy = accuracy_score(y_true_subset, y_pred_subset)
+    precision = precision_score(y_true_subset, y_pred_subset, zero_division=0)
+    recall = recall_score(y_true_subset, y_pred_subset)
+    f1 = f1_score(y_true_subset, y_pred_subset)
+    brier = brier_score_loss(y_true_subset, y_pred_proba_subset)
+
+    # Store results
+    stratified_metrics.append({
+        "Feature": col,  
+        "AUC": auc,
+        "Accuracy": accuracy,
+        "Precision": precision,
+        "Recall": recall,
+        "F1 Score": f1,
+        "Brier Score": brier,
+        "Log Loss": logloss,
+        "AUPR": aupr,
+        "Sample Size": sample_size
+    })
+
+# Convert results to DataFrame
+stratified_metrics_df = pd.DataFrame(stratified_metrics)
+print("\n✅ Final Stratified Metrics DataFrame")
+print(stratified_metrics_df)
+
+```
+
+```{r}
+
+risk_metrics <- py$catboost_metrics_hybrid
+
+stratified_risk_metrics <- py$stratified_metrics_df
+
+```
+
+```{r}
+
+df1 <- risk_metrics 
+df2 <-stratified_risk_metrics
+
+# Rename 'Model' column in df1 to 'Feature'
+colnames(df1)[colnames(df1) == "Model"] <- "Feature"
+
+# Add 'Sample Size' column with row count of hybrid_X_train
+sample_size <- nrow(py$hybrid_X_train)
+df1$`Sample Size` <- sample_size
+
+# 3. Select intersection of columns between df1 and df2
+common_columns <- intersect(colnames(df1), colnames(df2))
+df1 <- df1[, common_columns]
+df2 <- df2[, common_columns]
+
+# 4. Concatenate (rbind) df1 on top of df2
+consolidated_df <- rbind(df1, df2)
+
+write_csv(consolidated_df, "stratified_risk_metrics.csv")
+
+# Display the consolidated dataframe
+print(consolidated_df)
+
 ```

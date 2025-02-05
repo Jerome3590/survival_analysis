@@ -6,7 +6,6 @@
 .vs/*
 .vscode/*
 
-*.csv
 *.txt
 *.zip
 
