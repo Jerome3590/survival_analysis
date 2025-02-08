@@ -1,0 +1,112 @@
+---
+title: "Model Data and Train/Test split"
+author: "Michael D. Porter"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+format:
+  html:
+    toc: true
+    toc-depth: 5
+    code-fold: false
+    code-summary: "Show the code"
+    df_print: paged
+    embed-resources: true
+    default-image-extension: svg
+    dpi: 600
+---
+
+```{r load-libraries}
+#| echo: true
+#| warning: false
+#| message: false
+#| results: hide
+
+library(here)
+library(tidymodels)
+library(tidyverse)
+```
+
+### Model Dataset
+
+Updates:
+
+1. To help with reproducibility, I re-did the code that generates all data. In Box, look for `waitlist-data2.qmd` for the main data generation. Also, `center-stats.qmd` produces the center level statistics. 
+
+2. There are more observations. We were dropping some candidates that we didn't need to. 
+
+3. The target variable is called `outcome`. I think this was called `outcome_final` before. A simple `rename(outcome_full = outcome)` will fix it. 
+
+4. Some modified predictors:
+    a. `STATUS` is now an ordered factor replacing `INIT_STAT`.
+
+5. New predictors. Some may be helpful. I'll try them with logistic regression models. 
+    a. `CITIZENSHIP`
+    b. Several `LIFE_SUPPORT_{}` features. 
+    c. Several other `VAD` features.
+    d. `CEREB_VASC`, `DIALYSIS_CAND`, `HEMODYNAMICS_CO`, `INOTROP_VASO_CO_REG`
+    e. `eGFR` is an adjusted creatinine and should be a better predictor. 
+    f. `LIST_YR` is the listing year in case there are temporal changes 
+    g. `REGION` is the UNOS region. Seems like there some are better/worse. 
+
+6. Changes to the center level statistics. I don't like that we were calculating these values from all the data (effectively using the test data). 
+    a. `pedhrtx_prev_yr` is the new volume metric. It is the number of pediatric heart transplants at the center *in the previous year*. This will avoid the data leakage. It is now calculated using the thoracic data which should be better than the original version using PTR. 
+    b. I added a new `median_wait_days_1A`. This is similar to `median_wait_days`, but only for 1A Status patients. This will help treat all centers similarly even if they have a different distribution of statuses. 
+    
+7. I also grabbed some variables from the waitlist data. They are `PRELIM_XMATCH_REQ` and the `DONCRIT_{}` ones. They indicate how restrictive a patient is on being notified of a donor. Presumably, if they are more restrictive the patient will have to wait longer for an offer. Or there are other health concerns that are driving the more conservative behavior. 
+
+```{r load-dataset}
+#| echo: true
+#| warning: false
+#| message: false
+#| eval: true
+
+model_data <- read_rds(here("data", "model_data.rds"))
+
+model_data %>% 
+  str()
+```
+### Survival Model Dataset
+
+Create train/test split. Use 1000 observations for testing and `r nrow(model_data) - 1000` for testing. Stratify on the `outcome`. 
+
+```{r data-splitting}
+library(tidymodels)
+
+set.seed(2024)
+n_test = 1000
+
+split = model_data %>% 
+  rsample::initial_split(
+    prop = 1 - n_test/nrow(.), 
+    strata = outcome
+  )  
+
+model_data_train = training(split)
+model_data_test = testing(split)
+```
+
+```{r}
+model_data_train %>% count(outcome) %>% mutate(p = n/sum(n))
+model_data_test %>% count(outcome) %>% mutate(p = n/sum(n))
+```
+
+
+```{r}
+model_data_train %>% write_rds(here("data", "model_data_train.rds"))
+model_data_test %>% write_rds(here("data", "model_data_test.rds"))
+
+
+model_data_index = 
+  model_data %>% transmute(Row = row_number(), outcome, WL_ID_CODE) %>% 
+  left_join(
+    tidy(split), by = "Row"
+  ) %>% 
+  mutate(
+    Data = case_match(Data, "Analysis" ~ "Train", "Assessment" ~ "Test")
+  )
+
+model_data_index %>% write_rds(here("data", "model_data_index.rds"))
+
+model_data_index
+
+```
+
