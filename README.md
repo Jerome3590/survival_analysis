@@ -20,6 +20,10 @@ survival_analysis/
 │ ├── shap_correlation_plot.png  
 │ └── shapley_bar_one_hot.png 
 |
+├── tripod_ai_checklist/  
+│ ├── tripod_ai_checklistt.qmd  
+│ └── tripod_ai_checklist.html  
+|
 ├── utilities/  
 │ ├── make.R  
 │ └── plotting.R  
