@@ -18,8 +18,8 @@ survival_analysis/
 │ ├── mean_absolute_shap_importance.png  
 │ ├── partial_dependence_plots/  
 │ ├── shap_correlation_plot.png  
-│ └── shapley_bar_one_hot.png 
-|
+│ └── shapley_bar_one_hot.png  
+|  
 ├── tripod_ai_checklist/  
 │ ├── tripod_ai_checklistt.qmd  
 │ └── tripod_ai_checklist.html  
@@ -55,13 +55,16 @@ The `final_model/` directory contains- `survival_analysis_final_catboost_model.q
 ### Shap Values  
 The `shap_values/` directory contains an Interactive Feature Importance Plot
 
-### Visualizations
+### Images
 The `images/` directory stores generated plots and figures:
 - CatBoost beeswarm plot
 - Mean absolute SHAP importance
 - Partial dependence plots
 - SHAP correlation plot
 - Shapley bar plot (one-hot encoded)
+
+### TRIPOD+AI Checklist
+The `tripod_ai_checklist/` directory contains the completed TRIPOD+AI Checklist.  
 
 ### Model Data
 The `model_data/` directory contains the data pre-processing and processing used in the analysis.
