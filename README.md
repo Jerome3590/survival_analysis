@@ -6,25 +6,12 @@ This repository contains a comprehensive survival analysis project focusing on m
 
 survival_analysis/  
 │  
-├── survival_analysis_final_catboost_model.qmd (final model)  
-├── listing-mortality-prediction.qmd (various models)  
-├── eda/  
-│ ├── center-stats.qmd  
-│ ├── listing-mortality-prediction.qmd  
-│ ├── survival_analysis_catboost_xgboost_random_forest.qmd  
-│ ├── survival_analysis_feature_analysis.qmd  
-│ ├── survival_analysis_feature_encoding.qmd  
-│ ├── survival_analysis_model_evaluation.qmd  
-│ ├── survival_analysis_models.qmd  
-│ └── waitlist-data2.qmd  
+├── final_model/survival_analysis_final_catboost_model.qmd (final model)  
+│ ├── survival_analysis_final_catboost_model.qmd (final model)  
+│ └── survival_analysis_final_catboost_model.html (final model)  
 │  
-├── html/  
-│ ├── center-stats.html  
-│ ├── listing-mortality-prediction.html  
-│ ├── model_data.html  
-│ ├── sorted_shap_values_interactive.html  
-│ ├── survival_analysis_final_catboost_model.html  
-│ └── waitlist-data2.html  
+├── shap_values/  
+│ └── sorted_shap_values_interactive.html  
 │  
 ├── images/  
 │ ├── catboost_beeswarm.png  
@@ -34,9 +21,25 @@ survival_analysis/
 │ └── shapley_bar_one_hot.png  
 │  
 ├── utilities/  
+│ ├── make.R
 │ └── plotting.R  
 │  
-└── data/  
+└── model_data/  
+│ ├── center-stats.qmd
+│ ├── center-stats.html
+│ ├── model_data.qmd
+│ ├── model_data.html
+│ ├── waitlist-data2.qmd
+│ └── waitlist-data2.html
+|
+├── eda/  
+│ ├── listing-mortality-prediction.qmd (various models)
+│ ├── listing-mortality-prediction.html (various models)
+│ ├── survival_analysis_catboost_xgboost_random_forest.qmd
+│ ├── survival_analysis_feature_analysis.qmd  
+│ ├── survival_analysis_feature_encoding.qmd  
+│ ├── survival_analysis_model_evaluation.qmd  
+│ └── survival_analysis_models.qmd  
 
 
 ## Project Components
