@@ -1,116 +1,177 @@
 ---
-title: "TRIPOD AI Checklist"
-author: "R. Jerome Dixon"
-date: "`r format(Sys.Date(), '%B %d, %Y')`"
+title: "TRIPOD+AI Checklist"
 format:
   html:
     toc: true
     toc-depth: 5
-    code-fold: true
-    code-summary: "Show the code"
+    code-fold: false
     embed-resources: true
     default-image-extension: svg
     dpi: 600
 ---
 
-# TRIPOD-AI Checklist
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+library(here)
+```
 
 ## TITLE
 
-### Title
+1.  Identify the study as developing or evaluating the performance of a multivariable prediction model, the target population, and the outcome to be predicted.
 
-1.  **D;E** Identify the study as developing or evaluating the performance of a multivariable prediction model, the target population, and the outcome to be predicted.
+    **Machine Learning for Predicting Waitlist Mortality in Pediatric Heart Transplantation**
 
 ## ABSTRACT
 
-### Abstract
-
-2.  **D;E** See TRIPOD+AI for Abstracts checklist.
+  - N/A - full paper vice abstract only submission.
 
 ## INTRODUCTION
 
 ### Background
 
--   **3a. D;E** Explain the healthcare context (including whether diagnostic or prognostic) and rationale for developing or evaluating the prediction model, including references to existing models.
+-   **3a.** Explain the healthcare context (including whether diagnostic or prognostic) and rationale for developing or evaluating the prediction model, including references to existing models.
 
--   **3b. D;E** Describe the target population and the intended purpose of the prediction model in the context of the care pathway, including its intended users (e.g., healthcare professionals, patients, public).
+    -   Section: Introduction (Page 2-3)
 
--   **3c. D;E** Describe any known health inequalities between sociodemographic groups.
+-   **3b.** Describe the target population and the intended purpose of the prediction model in the context of the care pathway, including its intended users (e.g., healthcare professionals, patients, public).
+
+    -   Section: Introduction (Page 2-3)
+
+-   **3c.** Describe any known health inequalities between sociodemographic groups.
+
+    -   Section: Introduction (Page 3) & Discussion (Page 13-14)
 
 ### Objectives
 
--   **4. D;E** Specify the study objectives, including whether the study describes the development or validation of a prediction model (or both).
+-   **4.** Specify the study objectives, including whether the study describes the development or validation of a prediction model (or both).
+    -   Section: Introduction (Page 2-3)
+    -   Section: Methods (Page 5-6)
 
 ## METHODS
 
 ### Data
 
--   **5a. D;E** Describe the sources of data separately for the development and evaluation datasets (e.g., randomized trial, cohort, routine care or registry data), the rationale for using these data, and representativeness of the data.
+-   **5a.** Describe the sources of data separately for the development and evaluation datasets (e.g., randomized trial, cohort, routine care or registry data), the rationale for using these data, and representativeness of the data.
 
--   **5b. D;E** Specify the dates of the collected participant data, including start and end of participant accrual; and, if applicable, end of follow-up.
+    -   Section: Methods – Data Source (Page 5-6)
+
+-   **5b.** Specify the dates of the collected participant data, including start and end of participant accrual; and, if applicable, end of follow-up.
+
+    -   Section: Methods – Study Population (Page 6)
 
 ### Participants
 
--   **6a. D;E** Specify key elements of the study setting (e.g., primary care, secondary care, general population) including the number and location of centers.
+-   **6a.** Specify key elements of the study setting (e.g., primary care, secondary care, general population) including the number and location of centers.
 
--   **6b. D;E** Describe the eligibility criteria for study participants.
+    -   Section: Methods – Study Population (Page 6)
 
--   **6c. D;E** Give details of any treatments received, and how they were handled during model development or evaluation, if relevant.
+    -   Additional Context: Discussion (Page 13-14)
+
+-   **6b.** Describe the eligibility criteria for study participants.
+
+    -   Section: Methods – Study Population (Page 6)
+
+-   **6c.** Give details of any treatments received, and how they were handled during model development or evaluation, if relevant.
+
+    -   Section: Methods – Data Collection (Page 7)
+
+    -   Section: Results (Page 9)
 
 ### Data Preparation
 
--   **7. D;E** Describe any data pre-processing and quality checking, including whether this was similar across relevant sociodemographic groups.
+-   **7.** Describe any data pre-processing and quality checking, including whether this was similar across relevant sociodemographic groups.
+    -   see model-data (<https://github.com/Jerome3590/survival_analysis/tree/main/model-data>)
 
 ### Outcome
 
--   **8a. D;E** Clearly define the outcome that is being predicted and the time horizon, including how and when assessed, the rationale for choosing this outcome, and whether the method of outcome assessment is consistent across sociodemographic groups.
+-   **8a.** Clearly define the outcome that is being predicted and the time horizon, including how and when assessed, the rationale for choosing this outcome, and whether the method of outcome assessment is consistent across sociodemographic groups.
 
--   **8b. D;E** If outcome assessment requires subjective interpretation, describe the qualifications and demographic characteristics of the outcome assessors.
+    -   Section: Methods – Study Population (Page 6)
 
--   **8c. D;E** Report any actions to blind assessment of the outcome to be predicted.
+    -   Section: Methods – Statistical Analysis/Machine Learning Modeling (Page 7-8)
+
+    -   Section: Results (Page 9)
+
+-   **8b.** If outcome assessment requires subjective interpretation, describe the qualifications and demographic characteristics of the outcome assessors.
+
+    -   Section: Discussion (Page 13-14)
+
+-   **8c.** Report any actions to blind assessment of the outcome to be predicted.
+
+    -   N/A - Not needed, because the outcomes (waitlist mortality/removal) are recorded objectively in the OPTN database rather than assessed subjectively.
 
 ### Predictors
 
--   **9a. D** Describe the choice of initial predictors (e.g., literature, previous models, all available predictors) and any pre-selection of predictors before model building.
+-   **9a.** Describe the choice of initial predictors (e.g., literature, previous models, all available predictors) and any pre-selection of predictors before model building.
 
--   **9b. D;E** Clearly define all predictors, including how and when they were measured (and any actions to blind assessment of predictors for the outcome and other predictors).
+    -   Section: Methods – Data Collection (Page 7)
 
--   **9c. D;E** If predictor measurement requires subjective interpretation, describe the qualifications and demographic characteristics of the predictor assessors.
+-   **9b.** Clearly define all predictors, including how and when they were measured (and any actions to blind assessment of predictors for the outcome and other predictors).
+
+    -   Section: Methods – Data Collection (Page 7-8)
+
+    -   Section: Results – Top Predictors (Page 9)
+
+-   **9c. ** If predictor measurement requires subjective interpretation, describe the qualifications and demographic characteristics of the predictor assessors.
+
+    -   (Firezer - need a comment here)
 
 ### Sample Size
 
--   **10. D;E** Explain how the study size was arrived at (separately for development and evaluation), and justify that the study size was sufficient to answer the research question. Include details of any sample size calculation.
+-   **10.** Explain how the study size was arrived at (separately for development and evaluation), and justify that the study size was sufficient to answer the research question. Include details of any sample size calculation.
+    -   A formal sample size calculation is not required because the dataset includes all pediatric heart transplants in the U.S. from the OPTN database
 
 ### Missing Data
 
--   **11. D;E** Describe how missing data were handled. Provide reasons for omitting any data.
+-   **11.** Describe how missing data were handled. Provide reasons for omitting any data.
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/waitlist-data2.html>
 
-### Analytical Methods
+### Analytical Methods 
 
--   **12a. D** Describe how the data were used (e.g., for development and evaluation of model performance) in the analysis, including whether the data were partitioned, considering any sample size requirements.
+-   **12a.** Describe how the data were used (e.g., for development and evaluation of model performance) in the analysis, including whether the data were partitioned, considering any sample size requirements.
 
--   **12b. D** Depending on the type of model, describe how predictors were handled in the analyses (functional form, rescaling, transformation, or any standardization).
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
--   **12c. D** Specify the type of model, rationale, all model-building steps, including any hyperparameter tuning, and method for internal validation.
+-   **12b.** Depending on the type of model, describe how predictors were handled in the analyses (functional form, rescaling, transformation, or any standardization).
 
--   **12d. D;E** Describe if and how any heterogeneity in estimates of model parameter values and model performance was handled and quantified across clusters (e.g., hospitals, countries).
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
--   **12e. D;E** Specify all measures and plots used (and their rationale) to evaluate model performance (e.g., discrimination, calibration, clinical utility) and, if relevant, to compare multiple models.
+-   **12c.** Specify the type of model, rationale, all model-building steps, including any hyperparameter tuning, and method for internal validation.
 
--   **12f. E** Describe any model updating (e.g., recalibration) arising from the model evaluation, either overall or for particular sociodemographic groups or settings.
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
--   **12g. E** For model evaluation, describe how the model predictions were calculated (e.g., formula, code, object, application programming interface).
+-   **12d.** Describe if and how any heterogeneity in estimates of model parameter values and model performance was handled and quantified across clusters (e.g., hospitals, countries).
+
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/waitlist-data2.html>
+
+-   **12e.** Specify all measures and plots used (and their rationale) to evaluate model performance (e.g., discrimination, calibration, clinical utility) and, if relevant, to compare multiple models.
+
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
+
+-   **12f.** Describe any model updating (e.g., recalibration) arising from the model evaluation, either overall or for particular sociodemographic groups or settings.
+
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
+
+-   **12g.** For model evaluation, describe how the model predictions were calculated (e.g., formula, code, object, application programming interface).
+
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
 ### Class Imbalance
 
--   **13. D;E** If class imbalance methods were used, state why and how this was done, and any subsequent methods to recalibrate the model or the model predictions.
+-   **13.** If class imbalance methods were used, state why and how this was done, and any subsequent methods to recalibrate the model or the model predictions.
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
 ### Fairness
 
--   **14. D;E** Describe any approaches that were used to address model fairness and their rationale.
+-   **14.** Describe any approaches that were used to address model fairness and their rationale.
+    -   Section: Discussion – Racial Disparities (Page 13-14)
+    -   Section: Predictors – Model Inputs (Page 7-8, Page 9)
 
 ### Model Output
 
--   **15. D** Specify the output of the prediction model (e.g., probabilities, classification). Provide details and rationale for any classification and how the thresholds were identified.
+-   **15.** Specify the output of the prediction model (e.g., probabilities, classification). Provide details and rationale for any classification and how the thresholds were identified.
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
-**Source:** Collins GS, Moons KGM, Dhiman P, et al. BMJ 2024;385:e078378. doi:10.1136/bmj-2023-078378.yed).
+**TRIPOD+AI Checklist Source:** Collins GS, Moons KGM, Dhiman P, et al. BMJ 2024;385:e078378. doi:10.1136/bmj-2023-078378.yed).
