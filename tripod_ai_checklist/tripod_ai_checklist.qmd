@@ -23,13 +23,13 @@ library(here)
 
     **Machine Learning for Predicting Waitlist Mortality in Pediatric Heart Transplantation**
 
-## ABSTRACT
+### ABSTRACT
 
-  - N/A - full paper vice abstract only submission.
+-   N/A - full paper vice abstract only submission.
 
-## INTRODUCTION
+### INTRODUCTION
 
-### Background
+#### Background
 
 -   **3a.** Explain the healthcare context (including whether diagnostic or prognostic) and rationale for developing or evaluating the prediction model, including references to existing models.
 
@@ -49,44 +49,44 @@ library(here)
     -   Section: Introduction (Page 2-3)
     -   Section: Methods (Page 5-6)
 
-## METHODS
+### METHODS
 
-### Data
+#### Data
 
--   **5a.** Describe the sources of data separately for the development and evaluation datasets (e.g., randomized trial, cohort, routine care or registry data), the rationale for using these data, and representativeness of the data.
+##### 5a.Describe the sources of data separately for the development and evaluation datasets (e.g., randomized trial, cohort, routine care or registry data), the rationale for using these data, and representativeness of the data.
 
     -   Section: Methods – Data Source (Page 5-6)
 
--   **5b.** Specify the dates of the collected participant data, including start and end of participant accrual; and, if applicable, end of follow-up.
+##### 5b. Specify the dates of the collected participant data, including start and end of participant accrual; and, if applicable, end of follow-up.
 
     -   Section: Methods – Study Population (Page 6)
 
-### Participants
+#### Participants
 
--   **6a.** Specify key elements of the study setting (e.g., primary care, secondary care, general population) including the number and location of centers.
+##### 6a. Specify key elements of the study setting (e.g., primary care, secondary care, general population) including the number and location of centers.
 
     -   Section: Methods – Study Population (Page 6)
 
     -   Additional Context: Discussion (Page 13-14)
 
--   **6b.** Describe the eligibility criteria for study participants.
+##### 6b. Describe the eligibility criteria for study participants.
 
     -   Section: Methods – Study Population (Page 6)
 
--   **6c.** Give details of any treatments received, and how they were handled during model development or evaluation, if relevant.
+##### 6c. Give details of any treatments received, and how they were handled during model development or evaluation, if relevant.
 
     -   Section: Methods – Data Collection (Page 7)
 
     -   Section: Results (Page 9)
 
-### Data Preparation
+#### Data Preparation
 
--   **7.** Describe any data pre-processing and quality checking, including whether this was similar across relevant sociodemographic groups.
+##### 7. Describe any data pre-processing and quality checking, including whether this was similar across relevant sociodemographic groups.
     -   see model-data (<https://github.com/Jerome3590/survival_analysis/tree/main/model-data>)
 
-### Outcome
+#### Outcome
 
--   **8a.** Clearly define the outcome that is being predicted and the time horizon, including how and when assessed, the rationale for choosing this outcome, and whether the method of outcome assessment is consistent across sociodemographic groups.
+##### 8a. Clearly define the outcome that is being predicted and the time horizon, including how and when assessed, the rationale for choosing this outcome, and whether the method of outcome assessment is consistent across sociodemographic groups.
 
     -   Section: Methods – Study Population (Page 6)
 
@@ -94,7 +94,7 @@ library(here)
 
     -   Section: Results (Page 9)
 
--   **8b.** If outcome assessment requires subjective interpretation, describe the qualifications and demographic characteristics of the outcome assessors.
+##### 8b. If outcome assessment requires subjective interpretation, describe the qualifications and demographic characteristics of the outcome assessors.
 
     -   Section: Discussion (Page 13-14)
 
@@ -102,76 +102,197 @@ library(here)
 
     -   N/A - Not needed, because the outcomes (waitlist mortality/removal) are recorded objectively in the OPTN database rather than assessed subjectively.
 
-### Predictors
+#### Predictors
 
--   **9a.** Describe the choice of initial predictors (e.g., literature, previous models, all available predictors) and any pre-selection of predictors before model building.
+##### 9a. Describe the choice of initial predictors (e.g., literature, previous models, all available predictors) and any pre-selection of predictors before model building.
 
     -   Section: Methods – Data Collection (Page 7)
 
--   **9b.** Clearly define all predictors, including how and when they were measured (and any actions to blind assessment of predictors for the outcome and other predictors).
+##### 9b. Clearly define all predictors, including how and when they were measured (and any actions to blind assessment of predictors for the outcome and other predictors).
 
     -   Section: Methods – Data Collection (Page 7-8)
 
     -   Section: Results – Top Predictors (Page 9)
 
--   **9c. ** If predictor measurement requires subjective interpretation, describe the qualifications and demographic characteristics of the predictor assessors.
+##### 9c. If predictor measurement requires subjective interpretation, describe the qualifications and demographic characteristics of the predictor assessors.
 
     -   (Firezer - need a comment here)
 
-### Sample Size
+#### Sample Size
 
--   **10.** Explain how the study size was arrived at (separately for development and evaluation), and justify that the study size was sufficient to answer the research question. Include details of any sample size calculation.
+##### 10. Explain how the study size was arrived at (separately for development and evaluation), and justify that the study size was sufficient to answer the research question. Include details of any sample size calculation.
     -   A formal sample size calculation is not required because the dataset includes all pediatric heart transplants in the U.S. from the OPTN database
 
-### Missing Data
+#### Missing Data
 
--   **11.** Describe how missing data were handled. Provide reasons for omitting any data.
+##### 11. Describe how missing data were handled. Provide reasons for omitting any data.
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/waitlist-data2.html>
 
-### Analytical Methods 
+#### Analytical Methods
 
--   **12a.** Describe how the data were used (e.g., for development and evaluation of model performance) in the analysis, including whether the data were partitioned, considering any sample size requirements.
-
-    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
-
--   **12b.** Depending on the type of model, describe how predictors were handled in the analyses (functional form, rescaling, transformation, or any standardization).
+##### 12a. Describe how the data were used (e.g., for development and evaluation of model performance) in the analysis, including whether the data were partitioned, considering any sample size requirements.
 
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
--   **12c.** Specify the type of model, rationale, all model-building steps, including any hyperparameter tuning, and method for internal validation.
+##### 12b. Depending on the type of model, describe how predictors were handled in the analyses (functional form, rescaling, transformation, or any standardization).
 
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
--   **12d.** Describe if and how any heterogeneity in estimates of model parameter values and model performance was handled and quantified across clusters (e.g., hospitals, countries).
+##### 12c. Specify the type of model, rationale, all model-building steps, including any hyperparameter tuning, and method for internal validation.
+
+    -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
+
+##### 12d. Describe if and how any heterogeneity in estimates of model parameter values and model performance was handled and quantified across clusters (e.g., hospitals, countries).
 
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/waitlist-data2.html>
 
--   **12e.** Specify all measures and plots used (and their rationale) to evaluate model performance (e.g., discrimination, calibration, clinical utility) and, if relevant, to compare multiple models.
+##### 12e. Specify all measures and plots used (and their rationale) to evaluate model performance (e.g., discrimination, calibration, clinical utility) and, if relevant, to compare multiple models.
 
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
--   **12f.** Describe any model updating (e.g., recalibration) arising from the model evaluation, either overall or for particular sociodemographic groups or settings.
+##### 12f. Describe any model updating (e.g., recalibration) arising from the model evaluation, either overall or for particular sociodemographic groups or settings.
 
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
--   **12g.** For model evaluation, describe how the model predictions were calculated (e.g., formula, code, object, application programming interface).
+##### 12g. For model evaluation, describe how the model predictions were calculated (e.g., formula, code, object, application programming interface).
 
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
-### Class Imbalance
+#### Class Imbalance
 
--   **13.** If class imbalance methods were used, state why and how this was done, and any subsequent methods to recalibrate the model or the model predictions.
+##### 13. If class imbalance methods were used, state why and how this was done, and any subsequent methods to recalibrate the model or the model predictions.
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
 
-### Fairness
+#### Fairness
 
--   **14.** Describe any approaches that were used to address model fairness and their rationale.
+##### 14. Describe any approaches that were used to address model fairness and their rationale.
     -   Section: Discussion – Racial Disparities (Page 13-14)
     -   Section: Predictors – Model Inputs (Page 7-8, Page 9)
 
-### Model Output
+#### Model Output
 
--   **15.** Specify the output of the prediction model (e.g., probabilities, classification). Provide details and rationale for any classification and how the thresholds were identified.
+##### 15. Specify the output of the prediction model (e.g., probabilities, classification). Provide details and rationale for any classification and how the thresholds were identified.
     -   <https://github.com/Jerome3590/survival_analysis/blob/main/html/survival_analysis_final_catboost_model.html>
+
+#### Training vs. Evaluation
+
+##### 16. Differences in Training vs. Evaluation Data
+
+-   **Page 6, Methods – Study Population**
+
+-   The dataset was split into **training (80%)** and **testing (20%)**.
+
+-   No explicit comparison of training vs. evaluation data distributions was provided.
+
+-   Differences in predictor distributions were not analyzed across training and evaluation sets.
+
+#### Ethical Approval
+
+##### 17. Institutional Review Board Approval
+
+-   **Page 5-6, Methods – Data Source**
+
+-   The study was approved by the **institutional review board of the University of Virginia**.
+
+-   No mention of participant-informed consent or ethics committee waiver.
+
+### OPEN SCIENCE
+
+#### 18a. Funding
+
+-   **Page 1, Acknowledgments**
+
+-   Research was funded by **The Jefferson Trust and AHRQ grant 1R21HS029548-01A1**.
+
+#### 18b. Conflicts of Interest
+
+-   **Page 1, Acknowledgments**
+
+-   No explicit financial disclosures provided, but **authors state that the content represents their own views and not those of NIH**.
+
+#### 18c. Protocol Availability
+
+-   **Not Addressed in the Document**
+
+-   No protocol access information provided.
+
+#### 18d. Study Registration
+
+-   **Not Addressed in the Document**
+
+-   No registration details mentioned.
+
+#### 18e. Data Sharing
+
+-   **Not Addressed in the Document**
+
+-   No statement on study data availability.
+
+#### 18f. Code Sharing
+
+-   **Not Addressed in the Document**
+
+-   No mention of analytical code sharing.
+
+### PATIENT AND PUBLIC INVOLVEMENT
+
+#### 19. Patient & Public Involvement
+
+-   **Not Addressed in the Document**
+
+-   No patient or public involvement mentioned.
+
+### RESULTS
+
+#### 20a. Participant Flow
+
+-   **Not Addressed in the Document**
+
+-   No **participant flow diagram** included.
+
+#### 20b. Participant Characteristics
+
+-   **Page 6, Methods – Study Population**
+
+-   Sample size **(5,523 participants)** and some demographic factors were reported, but no **subgroup comparisons**.
+
+#### 20c. Comparison of Predictor Distributions
+
+-   **Not Addressed in the Document**
+
+-   No explicit comparison of predictor distributions between training and evaluation datasets.
+
+### DISCUSSION
+
+#### 25. Interpretation of Main Results
+
+-   **Page 13-14, Discussion**
+
+-   Discussed racial disparities and institutional effects on waitlist outcomes.
+
+#### 26. Study Limitations
+
+-   **Page 14-15, Discussion – Limitations**
+
+-   Identified issues with missing/incomplete data, lack of additional clinical predictors.
+
+#### 27a. Handling of Poor Data Quality
+
+-   **Not Addressed in the Document**
+
+-   No discussion on handling missing or poor-quality data.
+
+#### 27b. User Interaction & Expertise Required
+
+-   **Not Addressed in the Document**
+
+-   No details on user expertise or handling of missing data during implementation.
+
+#### 27c. Future Research and Generalizability
+
+-   **Page 14-15, Discussion – Future Research**
+
+-   Discussed potential **policy changes** and **model improvements** but lacked specifics on applicability to different healthcare settings.
+
 
 **TRIPOD+AI Checklist Source:** Collins GS, Moons KGM, Dhiman P, et al. BMJ 2024;385:e078378. doi:10.1136/bmj-2023-078378.yed).
