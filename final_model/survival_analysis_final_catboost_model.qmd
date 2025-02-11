@@ -1650,9 +1650,9 @@ plt.close()
 
 ![SHAP Value Correlation Plot](images/shap_correlation_plot.png){#fig-shap-correlation-plot}
 
-### SHAP Partial Dependence Plots
+### SHAP Partial Dependence Plots (Test)
 
-[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots)
+[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test)
 
 ```{python eval=FALSE, echo=FALSE}
 
@@ -1769,7 +1769,7 @@ create_pdp_numeric <- function(feature_name, pdp_data_df, pdp_shap_df, save_plot
   
   # Save the plot as a PNG file
   if (save_plots) {
-    ggsave(paste0("images/dependence_plots/shap_plot_numeric_", feature_name, ".png"), combined_plot)
+    ggsave(paste0("images/dependence_plots_test/shap_plot_numeric_", feature_name, ".png"), combined_plot)
   }
 }
 ```
@@ -1905,6 +1905,246 @@ features
 
 ```{r eval=FALSE}
 create_shap_pdp_plots(features, pdp_data_df, pdp_shap_df, save_plots = TRUE)
+```
+
+### SHAP Partial Dependence Plots (Train)
+
+[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train)
+
+```{python eval=FALSE, echo=FALSE}
+
+shap_values_train_pdp = explainer(hybrid_X_train)
+
+```
+
+
+```{python eval=FALSE, echo=FALSE}
+
+pdp_shap_values_train = shap_values_train_pdp.values
+
+pdp_shap_data_train = shap_values_train_pdp.data
+
+pdp_feature_names_train = updated_feature_names
+
+```
+
+```{r eval=FALSE, echo=FALSE}
+
+pdp_shap_train_df <- as.data.frame(py$pdp_shap_values_train)
+pdp_data_train_df <- as.data.frame(py$pdp_shap_data_train) %>% 
+  unnest(cols = c(V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12,
+  V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26,
+  V27, V28, V29, V30, V31, V32, V33, V34, V35, V36, V37, V38, V39, V40,
+  V41, V42, V43))
+
+colnames(pdp_shap_train_df) <- py$pdp_feature_names_train
+colnames(pdp_data_train_df) <- py$pdp_feature_names_train
+
+```
+
+```{r eval=FALSE}
+
+features <- py$updated_feature_names
+
+```
+
+#### Numeric Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r}
+
+create_pdp_numeric_train <- function(feature_name, pdp_data_train_df, pdp_shap_train_df, save_plots = TRUE) {
+  
+  # Set the threshold for outlier removal based on Z-score
+  threshold <- 3
+  
+  # Check if the feature is present in both test_data and pdp_shap_data
+  if (!feature_name %in% colnames(pdp_data_train_df) || !feature_name %in% colnames(pdp_shap_df)){
+    stop(paste("Feature", feature_name, "not found in the data."))
+  }
+  
+  # Dataframe for the feature values and corresponding SHAP values
+  pdp_shap_data_feature <- data.frame(
+    feature_value = pdp_data_train_df[[feature_name]],  # Original feature values
+    shap_value = pdp_shap_train_df[[feature_name]]  # SHAP values
+  )
+  
+  # Remove rows with NA values in either feature_value or shap_value
+  pdp_shap_data_feature <- na.omit(pdp_shap_data_feature)
+  
+  if (feature_name == 'eGFR'){
+    pdp_shap_data_feature <- pdp_shap_data_feature[pdp_shap_data_feature$feature_value < 400, ]
+  }
+  
+  # Define unit labels for axis titles only
+  unit_labels <- list(
+    eGFR = "ml/min/1.73m^2",
+    Albumin = "g/dL",
+    Height = "cm",
+    Weight = "kgs",
+    Age = "years",
+    BSA = "m^2",
+    BMI = "kg/m^2"
+  )
+  
+  # Get the appropriate unit label for the feature
+  unit_label <- unit_labels[[feature_name]]
+  
+  # Scatter plot using ggplot2
+  scatter_plot <- ggplot(pdp_shap_data_feature, aes(x = feature_value, y = shap_value)) +
+    geom_point(color = 'blue', alpha = 0.6) + 
+    scale_x_continuous(breaks = function(x) pretty(x, n = 10)) +
+    scale_y_continuous() +  
+    labs(x = if (!is.null(unit_label) && unit_label != "") 
+           paste(feature_name, " Values (", unit_label, ")", sep = "") 
+         else 
+           paste(feature_name, "Values"),
+       y = "SHAP Values",
+       title = paste("SHAP Partial Dependency Plot for", feature_name)) +
+  theme_minimal()  
+  
+  # Create marginal histogram for the bottom (x-axis)
+  histogram_plot <- ggplot(pdp_shap_data_feature, aes(x = feature_value)) +
+    geom_histogram(fill = "grey", bins = 30) +
+    theme_minimal() +
+    labs(x = paste(feature_name, "Values (", unit_label, ")", sep = ""), y = "Count")
+  
+  # Remove axis labels, ticks, and gridlines from the histogram to clean up appearance
+  histogram_plot <- histogram_plot +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      panel.grid = element_blank(), 
+      plot.margin = margin(5, 5, 5, 5)
+    )
+  
+  combined_plot <- scatter_plot / histogram_plot + plot_layout(heights = c(20, 1))
+  
+  # Display the plot
+  print(combined_plot)
+  
+  # Save the plot as a PNG file
+  if (save_plots) {
+    ggsave(paste0("images/dependence_plots_train/shap_plot_numeric_", feature_name, ".png"), combined_plot)
+  }
+}
+
+```
+
+#### Categorical Plotting Function {.hidden .unnumbered .unlisted}
+
+```{r}
+
+create_pdp_categorical_train <- function(feature_name, pdp_data_train_df, pdp_shap_train_df, save_plot = TRUE, plot_width = 5, plot_height = 4) {
+  
+  # Check if the feature is present in both test_data and pdp_shap_data
+  if (!feature_name %in% colnames(pdp_data_train_df) || !feature_name %in% colnames(pdp_shap_train_df)) {
+    stop(paste("Feature", feature_name, "not found in the data."))
+  }
+  
+  # Create a dataframe for the feature values and corresponding SHAP values
+  pdp_shap_data_feature <- data.frame(
+    feature_value = pdp_data_train_df[[feature_name]],  # Actual feature values (categories)
+    shap_value = pdp_shap_train_df[[feature_name]]  # Corresponding SHAP values
+  )
+  
+  # Define unit labels for axis titles only
+  cat_labels <- list(
+    DCM = "Dilated Cardiomyopathy",
+    HCM = "Hypertrophic Cardiomyopathy",
+    ECMO = "ECMO Cardiogram",
+    RCM = "Restrictive Cardiomyopathy",
+    Myocard = "Myocardium",
+    Defib = "Defibrillator",
+   `VAD REG` = "Ventricular Assist Device (VAD) at Registration",
+   `VAD TCR` = "Ventricular Assist Device (VAD) at Listing",
+    VHD = "Valvular Heart Disease (VHD)",
+   `XMatch Req` = "Transplant Match Requested"
+  )
+  
+  # Get the appropriate unit label for the feature
+  cat_label <- cat_labels[[feature_name]]
+  
+  # Calculate the mean SHAP value for each category
+  pdp_shap_summary <- pdp_shap_data_feature %>%
+    group_by(feature_value) %>%
+    summarize(mean_shap = mean(shap_value, na.rm = TRUE), .groups = 'drop')
+  
+  # Create the plot
+  plot <- ggplot(pdp_shap_summary, aes(x = reorder(feature_value, mean_shap), y = mean_shap, fill = feature_value)) +
+    geom_bar(stat = "identity", show.legend = FALSE) +
+    
+    # Set axis labels and title
+    labs(
+      x = if (!is.null(cat_label) && cat_label != "") 
+           cat_label 
+         else 
+           paste(feature_name, "Categories"),
+      y = "Mean SHAP Value",
+      title = paste("Partial Dependency Plot for", feature_name)
+    ) +
+    
+    # Apply minimal theme and customize appearance
+    theme_minimal() +
+    theme(
+      panel.grid = element_blank(),  # Remove gridlines if desired
+      axis.text.x = if (feature_name == "Listing Ctr") element_blank() else element_text(angle = 45, hjust = 1),
+      axis.title.x = if (feature_name == "Listing Ctr") element_blank() else element_text(),
+      axis.ticks.x = if (feature_name == "Listing Ctr") element_blank() else element_line(),
+      axis.text.y = element_text(),
+      axis.title.y = element_text()
+    )
+  
+  # Display the plot
+  print(plot)
+  
+  # Save the plot if required
+  if (save_plot) {
+    ggsave(paste0("images/dependence_plots_train/shap_plot_categorical_", feature_name, ".png"), plot, width = plot_width, height = plot_height)
+  }
+}
+
+```
+
+#### Final Shap Value Partial Dependency Plotting Function {.hidden .unnumbered .unlisted}
+
+
+```{r eval=FALSE}
+
+# Function to determine the type of feature and call the appropriate plotting function for multiple features
+create_shap_pdp_plots_train <- function(feature_names, pdp_data_train_df, pdp_shap_train_data, save_plots = TRUE) {
+  
+  # Loop over each feature in the feature_names list
+  for (feature_name in feature_names) {
+    
+    # Check if the feature is present in test_data
+    if (!feature_name %in% colnames(pdp_data_df)) {
+      message(paste("Feature", feature_name, "not found in the data. Skipping..."))
+      next  # Skip this feature if not found
+    }
+    
+    # Determine if the feature is numeric or categorical
+    if (is.numeric(pdp_data_train_df[[feature_name]])) {
+      # If numeric, call the numeric plotting function
+      create_pdp_numeric_train(feature_name, pdp_data_train_df, pdp_shap_train_data, save_plots = TRUE)
+    } else if (is.factor(pdp_data_train_df[[feature_name]]) || is.character(pdp_data_train_df[[feature_name]])) {
+      # If categorical, call the categorical plotting function
+      create_pdp_categorical_train(feature_name, pdp_data_train_df, pdp_shap_train_data, save_plot = TRUE, plot_width = 5, plot_height = 4)
+    } else {
+      message(paste("Unsupported data type for feature:", feature_name, "Skipping..."))
+    }
+  }
+}
+
+```
+
+
+```{r eval=FALSE}
+
+create_shap_pdp_plots_train(features, pdp_data_train_df, pdp_shap_train_df, save_plots = TRUE)
 ```
 
 ### Stratified Model Accuracy Metrics

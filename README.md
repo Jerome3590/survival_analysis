@@ -16,7 +16,8 @@ survival_analysis/
 ├── images/  
 │ ├── catboost_beeswarm.png  
 │ ├── mean_absolute_shap_importance.png  
-│ ├── partial_dependence_plots/  
+│ ├── partial_dependence_plots_test/ 
+│ ├── partial_dependence_plots_train/ 
 │ ├── shap_correlation_plot.png  
 │ └── shapley_bar_one_hot.png  
 |  
@@ -59,7 +60,7 @@ The `shap_values/` directory contains an Interactive Feature Importance Plot
 The `images/` directory stores generated plots and figures:
 - CatBoost beeswarm plot
 - Mean absolute SHAP importance
-- Partial dependence plots
+- Partial dependence plots - Test and Train
 - SHAP correlation plot
 - Shapley bar plot (one-hot encoded)
 
