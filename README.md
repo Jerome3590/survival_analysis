@@ -4,46 +4,43 @@ This repository contains a comprehensive survival analysis project focusing on m
 
 ## Project Structure
 
-survival_analysis/  
-│  
-├── final_model/survival_analysis_final_catboost_model.qmd (final model)  
-│ ├── survival_analysis_final_catboost_model.qmd (final model)  
-│ ├── survival_analysis_final_catboost_model.html (final model)  
-│ ├── stratified_risk_metrics.csv
-│ └── sorted_shap_values_interactive.html  
-|
-├── final_model/images/  
-│ ├── catboost_beeswarm.png  
-│ ├── mean_absolute_shap_importance.png  
-│ ├── partial_dependence_plots_test/ 
-│ ├── partial_dependence_plots_train/ 
-│ ├── shap_correlation_plot.png  
-│ └── shapley_bar_one_hot.png  
-|  
-├── tripod_ai_checklist/  
-│ ├── tripod_ai_checklistt.qmd  
-│ └── tripod_ai_checklist.html  
-|
-├── utilities/  
-│ ├── make.R  
-│ └── plotting.R  
-|
-└── model_data/  
-│ ├── center-stats.qmd  
-│ ├── center-stats.html  
-│ ├── model_data.qmd  
-│ ├── model_data.html  
-│ ├── waitlist-data2.qmd  
-│ └── waitlist-data2.html  
-|
-├── eda/  
-│ ├── listing-mortality-prediction.qmd (various models)  
-│ ├── listing-mortality-prediction.html (various models)  
-│ ├── survival_analysis_catboost_xgboost_random_forest.qmd  
-│ ├── survival_analysis_feature_analysis.qmd   
-│ ├── survival_analysis_feature_encoding.qmd   
-│ ├── survival_analysis_model_evaluation.qmd   
-└──── survival_analysis_models.qmd   
+```mermaid
+graph TD
+  A[survival_analysis] --> B[final_model]
+  B --> B1[survival_analysis_final_catboost_model.qmd]
+  B --> B2[survival_analysis_final_catboost_model.html]
+  B --> B3[stratified_risk_metrics.csv]
+  B --> B4[sorted_shap_values_interactive.html]
+  B --> C[images]
+  C --> C1[catboost_beeswarm.png]
+  C --> C2[mean_absolute_shap_importance.png]
+  C --> C3[partial_dependence_plots_test]
+  C --> C4[partial_dependence_plots_train]
+  C --> C5[shap_correlation_plot.png]
+  C --> C6[shapley_bar_one_hot.png]
+  A --> D[tripod_ai_checklist]
+  D --> D1[tripod_ai_checklistt.qmd]
+  D --> D2[tripod_ai_checklist.html]
+  A --> E[utilities]
+  E --> E1[make.R]
+  E --> E2[plotting.R]
+  A --> F[model_data]
+  F --> F1[center-stats.qmd]
+  F --> F2[center-stats.html]
+  F --> F3[model_data.qmd]
+  F --> F4[model_data.html]
+  F --> F5[waitlist-data2.qmd]
+  F --> F6[waitlist-data2.html]
+  A --> G[eda]
+  G --> G1[listing-mortality-prediction.qmd]
+  G --> G2[listing-mortality-prediction.html]
+  G --> G3[survival_analysis_catboost_xgboost_random_forest.qmd]
+  G --> G4[survival_analysis_feature_analysis.qmd]
+  G --> G5[survival_analysis_feature_encoding.qmd]
+  G --> G6[survival_analysis_model_evaluation.qmd]
+  G --> G7[survival_analysis_models.qmd]
+  
+```
 
 
 ## Project Components  
