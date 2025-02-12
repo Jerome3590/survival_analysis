@@ -39,7 +39,6 @@ graph TD
   G --> G5[survival_analysis_feature_encoding.qmd]
   G --> G6[survival_analysis_model_evaluation.qmd]
   G --> G7[survival_analysis_models.qmd]
-  
 ```
 
 
