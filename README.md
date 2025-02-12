@@ -5,7 +5,7 @@ This repository contains a comprehensive survival analysis project focusing on m
 ## Project Structure
 
 ```mermaid
-graph TD
+graph LR
   A[survival_analysis] --> B[final_model]
   B --> B1[survival_analysis_final_catboost_model.qmd]
   B --> B2[survival_analysis_final_catboost_model.html]
