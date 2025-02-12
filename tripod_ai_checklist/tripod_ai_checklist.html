@@ -3149,9 +3149,17 @@ vertical-align: -.125em;
   </ul></li>
   <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">RESULTS</a>
   <ul>
+  <li><a href="#participants-1" id="toc-participants-1" class="nav-link" data-scroll-target="#participants-1">Participants</a>
+  <ul class="collapse">
   <li><a href="#a.-participant-flow" id="toc-a.-participant-flow" class="nav-link" data-scroll-target="#a.-participant-flow">20a. Participant Flow</a></li>
   <li><a href="#b.-participant-characteristics" id="toc-b.-participant-characteristics" class="nav-link" data-scroll-target="#b.-participant-characteristics">20b. Participant Characteristics</a></li>
   <li><a href="#c.-comparison-of-predictor-distributions" id="toc-c.-comparison-of-predictor-distributions" class="nav-link" data-scroll-target="#c.-comparison-of-predictor-distributions">20c. Comparison of Predictor Distributions</a></li>
+  <li><a href="#model-development" id="toc-model-development" class="nav-link" data-scroll-target="#model-development">21. Model development</a></li>
+  <li><a href="#model-specification" id="toc-model-specification" class="nav-link" data-scroll-target="#model-specification">22. Model specification</a></li>
+  <li><a href="#a.-model-performance-23a" id="toc-a.-model-performance-23a" class="nav-link" data-scroll-target="#a.-model-performance-23a">23a. Model performance 23a</a></li>
+  <li><a href="#b.-if-examined-report-results-of-any-heterogeneity-in-model-performance-across-clusters.-see-tripod-cluster-for-additional-details." id="toc-b.-if-examined-report-results-of-any-heterogeneity-in-model-performance-across-clusters.-see-tripod-cluster-for-additional-details." class="nav-link" data-scroll-target="#b.-if-examined-report-results-of-any-heterogeneity-in-model-performance-across-clusters.-see-tripod-cluster-for-additional-details.">23b. If examined, report results of any heterogeneity in model performance across clusters. See TRIPOD Cluster for additional details.</a></li>
+  <li><a href="#model-updating" id="toc-model-updating" class="nav-link" data-scroll-target="#model-updating">24. Model updating</a></li>
+  </ul></li>
   </ul></li>
   <li><a href="#discussion" id="toc-discussion" class="nav-link" data-scroll-target="#discussion">DISCUSSION</a>
   <ul>
@@ -3395,8 +3403,8 @@ vertical-align: -.125em;
 <li>The dataset was split into <strong>training (80%)</strong> and <strong>testing (20%)</strong>.</li>
 <li>SHAP Partial Dependence Plots
 <ul>
-<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train">https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train</a></li>
-<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test">https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test</a></li>
+<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train">https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train</a></li>
+<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test">https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test</a></li>
 </ul></li>
 </ul>
 </section>
@@ -3457,29 +3465,66 @@ vertical-align: -.125em;
 </section>
 <section id="results" class="level3">
 <h3 class="anchored" data-anchor-id="results">RESULTS</h3>
-<section id="a.-participant-flow" class="level4">
-<h4 class="anchored" data-anchor-id="a.-participant-flow">20a. Participant Flow</h4>
+<section id="participants-1" class="level4">
+<h4 class="anchored" data-anchor-id="participants-1">Participants</h4>
+<section id="a.-participant-flow" class="level5">
+<h5 class="anchored" data-anchor-id="a.-participant-flow">20a. Participant Flow</h5>
 <ul>
 <li><a href="https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html">https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html</a></li>
 </ul>
 </section>
-<section id="b.-participant-characteristics" class="level4">
-<h4 class="anchored" data-anchor-id="b.-participant-characteristics">20b. Participant Characteristics</h4>
+<section id="b.-participant-characteristics" class="level5">
+<h5 class="anchored" data-anchor-id="b.-participant-characteristics">20b. Participant Characteristics</h5>
 <ul>
 <li>Page 6, Methods – Study Population**</li>
 <li>Sample size <strong>(5,523 participants)</strong></li>
 <li><a href="https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html">https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html</a></li>
 </ul>
 </section>
-<section id="c.-comparison-of-predictor-distributions" class="level4">
-<h4 class="anchored" data-anchor-id="c.-comparison-of-predictor-distributions">20c. Comparison of Predictor Distributions</h4>
+<section id="c.-comparison-of-predictor-distributions" class="level5">
+<h5 class="anchored" data-anchor-id="c.-comparison-of-predictor-distributions">20c. Comparison of Predictor Distributions</h5>
 <ul>
 <li>SHAP Partial Dependence Plots
 <ul>
-<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train">https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train</a></li>
-<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test">https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test</a></li>
+<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train">https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train</a></li>
+<li><a href="https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test">https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test</a></li>
 </ul></li>
 </ul>
+</section>
+<section id="model-development" class="level5">
+<h5 class="anchored" data-anchor-id="model-development">21. Model development</h5>
+<p>Specify the number of participants and outcome events in each analysis (e.g., for model development, hyperparameter tuning, model evaluation)</p>
+<ul>
+<li><a href="https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html">https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html</a></li>
+</ul>
+</section>
+<section id="model-specification" class="level5">
+<h5 class="anchored" data-anchor-id="model-specification">22. Model specification</h5>
+<p>Provide details of the full prediction model (e.g., formula, code, object, application programming interface) to allow predictions in new individuals and to enable third-party evaluation and implementation, including any restrictions to access or re-use (e.g., freely available, proprietary)</p>
+<ul>
+<li><a href="https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html">https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html</a></li>
+</ul>
+</section>
+<section id="a.-model-performance-23a" class="level5">
+<h5 class="anchored" data-anchor-id="a.-model-performance-23a">23a. Model performance 23a</h5>
+<p>Report model performance estimates with confidence intervals, including for any key subgroups (e.g., sociodemographic). Consider plots to aid presentation.</p>
+<ul>
+<li><a href="https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html">https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html</a></li>
+</ul>
+</section>
+<section id="b.-if-examined-report-results-of-any-heterogeneity-in-model-performance-across-clusters.-see-tripod-cluster-for-additional-details." class="level5">
+<h5 class="anchored" data-anchor-id="b.-if-examined-report-results-of-any-heterogeneity-in-model-performance-across-clusters.-see-tripod-cluster-for-additional-details.">23b. If examined, report results of any heterogeneity in model performance across clusters. See TRIPOD Cluster for additional details.</h5>
+<ul>
+<li>N/A. <a href="https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html">https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html</a></li>
+</ul>
+</section>
+<section id="model-updating" class="level5">
+<h5 class="anchored" data-anchor-id="model-updating">24. Model updating</h5>
+<p>Report the results from any model updating, including the updated model and subsequent performance</p>
+<ul>
+<li>N/A</li>
+</ul>
+</section>
 </section>
 </section>
 <section id="discussion" class="level3">

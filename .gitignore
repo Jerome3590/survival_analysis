@@ -9,7 +9,7 @@
 *.txt
 *.zip
 
-catboost_info/*
+*/catboost_info/*
 data/*
 
 papers/*

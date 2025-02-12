@@ -8,12 +8,11 @@ survival_analysis/
 │  
 ├── final_model/survival_analysis_final_catboost_model.qmd (final model)  
 │ ├── survival_analysis_final_catboost_model.qmd (final model)  
-│ └── survival_analysis_final_catboost_model.html (final model)  
-|
-├── shap_values/  
+│ ├── survival_analysis_final_catboost_model.html (final model)  
+│ ├── stratified_risk_metrics.csv
 │ └── sorted_shap_values_interactive.html  
 |
-├── images/  
+├── final_model/images/  
 │ ├── catboost_beeswarm.png  
 │ ├── mean_absolute_shap_importance.png  
 │ ├── partial_dependence_plots_test/ 
