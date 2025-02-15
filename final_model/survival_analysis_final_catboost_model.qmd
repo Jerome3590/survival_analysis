@@ -41,6 +41,8 @@ library(probably)
 library(pROC)
 library(lubridate)
 library(digest)
+library(DataExplorer)
+library(jsonlite)
 
 (options)(scipen=999)
 
@@ -99,10 +101,11 @@ survival_model %<>%
 
 ```
 
-```{r}
-
-library(DataExplorer)
-library(jsonlite)
+```{r dataset-structure}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: false
 
 p <- plot_str(survival_model)  # Generate networkD3 object
 
@@ -112,9 +115,11 @@ write_json(p, here("model_data","structure_plot.json"), pretty = TRUE)
 ```
 
 
-```{r}
-
-library(DataExplorer)
+```{r data-profile-report}
+#| echo: false
+#| warning: false
+#| message: false
+#| eval: false
 
 config <- configure_report(
   add_plot_qq = FALSE,
@@ -402,7 +407,6 @@ train_data <- survival_model %>%
 # Must be factor or numeric "Class"
 train_target <- survival_model %>% 
   select(outcome) %>% 
-  dummify() %>% 
   as.data.frame()
 
 train_Y <- survival_model$outcome
@@ -415,7 +419,6 @@ test_data <- survival_model_test %>%
 # Must be factor or numeric "Class"
 test_target <- survival_model_test %>% 
   select(outcome) %>% 
-  dummify() %>% 
   as.data.frame()
 
 test_Y <- survival_model_test$outcome
@@ -1707,7 +1710,7 @@ plt.close()
 
 ### SHAP Partial Dependence Plots (Test)
 
-[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test)
+[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test)
 
 ```{python eval=FALSE, echo=FALSE}
 
@@ -1964,7 +1967,7 @@ create_shap_pdp_plots(features, pdp_data_df, pdp_shap_df, save_plots = TRUE)
 
 ### SHAP Partial Dependence Plots (Train)
 
-[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train)
+[SHAP Partial Dependence Plots](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train)
 
 ```{python eval=FALSE, echo=FALSE}
 
