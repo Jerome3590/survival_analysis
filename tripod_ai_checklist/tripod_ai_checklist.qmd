@@ -104,7 +104,7 @@ library(here)
 
 ##### 7. Describe any data pre-processing and quality checking, including whether this was similar across relevant sociodemographic groups.
 
-- see model-data [(https://github.com/Jerome3590/survival_analysis/tree/main/model_data](https://github.com/Jerome3590/survival_analysis/tree/main/model_data)
+- see [model-data](https://github.com/Jerome3590/survival_analysis/tree/main/model_data)
 
 #### Outcome
 
@@ -144,7 +144,7 @@ library(here)
 ##### 9c. If predictor measurement requires subjective interpretation, describe the qualifications and demographic characteristics of the predictor assessors.
 
 ```         
-- (Firezer - need a comment here)
+N/A.
 ```
 
 #### Sample Size
@@ -158,43 +158,43 @@ library(here)
 
 ##### 11. Describe how missing data were handled. Provide reasons for omitting any data.
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html](https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html)
+- [waitlist-data2.html](https://plotly-demo.s3.us-east-1.amazonaws.com/waitlist-data2.html)
 
 
 #### Analytical Methods
 
 ##### 12a. Describe how the data were used (e.g., for development and evaluation of model performance) in the analysis, including whether the data were partitioned, considering any sample size requirements.
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 ##### 12b. Depending on the type of model, describe how predictors were handled in the analyses (functional form, rescaling, transformation, or any standardization).
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 ##### 12c. Specify the type of model, rationale, all model-building steps, including any hyperparameter tuning, and method for internal validation.
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 ##### 12d. Describe if and how any heterogeneity in estimates of model parameter values and model performance was handled and quantified across clusters (e.g., hospitals, countries).
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html](https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html)
+- [waitlist-data2.html](https://plotly-demo.s3.us-east-1.amazonaws.com/waitlist-data2.html)
 
 
 ##### 12e. Specify all measures and plots used (and their rationale) to evaluate model performance (e.g., discrimination, calibration, clinical utility) and, if relevant, to compare multiple models.
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 ##### 12f. Describe any model updating (e.g., recalibration) arising from the model evaluation, either overall or for particular sociodemographic groups or settings.
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 ##### 12g. For model evaluation, describe how the model predictions were calculated (e.g., formula, code, object, application programming interface).
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 #### Class Imbalance
 
@@ -202,7 +202,7 @@ library(here)
 
 CatBoost provides a scale_pos_weight parameter for handling class imbalance, but we are instead using a probabilistic approach with calibration plots and decision threshold tuning to optimize for our desired precision-recall trade-off in the final model. Full code can be found here:
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 #### Fairness
@@ -218,17 +218,17 @@ CatBoost provides a scale_pos_weight parameter for handling class imbalance, but
 
 ##### 15. Specify the output of the prediction model (e.g., probabilities, classification). Provide details and rationale for any classification and how the thresholds were identified.
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 #### Training vs. Evaluation
 
 ##### 16. Differences in Training vs. Evaluation Data
 
 - Page 6, Methods – Study Population
-- The dataset was split into **training (80%)** and **testing (20%)**.
+- The dataset was split into **training (82%)** and **testing (18%)**.
 - SHAP Partial Dependence Plots
-  - [https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train)
-  - [https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test)
+  - [dependence_plots_train](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train)
+  - [dependence_plots_test](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test)
 
 
 #### Ethical Approval
@@ -245,10 +245,8 @@ CatBoost provides a scale_pos_weight parameter for handling class imbalance, but
 
 #### 18a. Funding
 
-```         
 - Page 1, Acknowledgments
 - Research was funded by **The Jefferson Trust and AHRQ grant 1R21HS029548-01A1**.
-```
 
 #### 18b. Conflicts of Interest
 
@@ -257,22 +255,22 @@ CatBoost provides a scale_pos_weight parameter for handling class imbalance, but
 
 #### 18c. Protocol Availability
 
-- [https://github.com/Jerome3590/survival_analysis](https://github.com/Jerome3590/survival_analysis)  
+- [survival_analysis](https://github.com/Jerome3590/survival_analysis)  
 
 #### 18d. Study Registration
 
 ```         
-N/A. (Firezer - please add a comment here if needed)
+N/A. OPTN database.
 ```
 
 #### 18e. Data Sharing
 
-- [https://github.com/Jerome3590/survival_analysis](https://github.com/Jerome3590/survival_analysis)
+- [model_data](https://github.com/Jerome3590/survival_analysis/blob/main/model_data/README.md)
 
 
 #### 18f. Code Sharing
 
-- [https://github.com/Jerome3590/survival_analysis](https://github.com/Jerome3590/survival_analysis)
+- [survival_analysis](https://github.com/Jerome3590/survival_analysis)
 
 
 ### PATIENT AND PUBLIC INVOLVEMENT
@@ -280,7 +278,7 @@ N/A. (Firezer - please add a comment here if needed)
 #### 19. Patient & Public Involvement
 
 ```         
-N/A. (Firezer - please add a comment here)
+N/A. OPTN Database.
 ```
 
 ### RESULTS
@@ -289,49 +287,49 @@ N/A. (Firezer - please add a comment here)
 
 ##### 20a. Participant Flow
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html](https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html)
+- [waitlist-data2.html](https://plotly-demo.s3.us-east-1.amazonaws.com/waitlist-data2.html)
 
 ##### 20b. Participant Characteristics
 
 - Page 6, Methods – Study Population**
 - Sample size **(5,523 participants)**
-- [https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html](https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html)
+- [waitlist-data2.html](https://plotly-demo.s3.us-east-1.amazonaws.com/waitlist-data2.html)
 
 
 ##### 20c. Comparison of Predictor Distributions
 
 - SHAP Partial Dependence Plots
-  - [https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train)
-  - [https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test)
+  - [dependence_plots_train](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train)
+  - [dependence_plots_test](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test)
 
 
 ##### 21. Model development 
 Specify the number of participants and outcome events in each analysis (e.g., for model development, hyperparameter tuning, model evaluation)
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 #####  22. Model specification
 Provide details of the full prediction model (e.g., formula, code, object, application programming interface) to allow predictions in new individuals and to enable third-party evaluation and implementation, including any restrictions to access or re-use (e.g., freely available, proprietary)
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 ##### 23a. Model performance 23a
 Report model performance estimates with confidence intervals, including for any key subgroups (e.g., sociodemographic). Consider plots to aid presentation.
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 ##### 23b. If examined, report results of any heterogeneity in model performance across clusters. See TRIPOD Cluster for additional details.
 
-- N/A. [https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html](https://github.com/Jerome3590/survival_analysis/blob/main/final_model/survival_analysis_final_catboost_model.html)
+- N/A. [survival_analysis_final_catboost_model.html](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 
 
 ##### 24. Model updating 
 Report the results from any model updating, including the updated model and subsequent performance
 
-- N/A
+- N/A. Initial model.
 
 ### DISCUSSION
 
@@ -339,24 +337,22 @@ Report the results from any model updating, including the updated model and subs
 
 ```         
 - Page 13-14, Discussion
-- Discussed racial disparities and institutional effects on waitlist outcomes.
 ```
 
 #### 26. Study Limitations
 
 ```         
 - Page 14-15, Discussion – Limitations
-- Identified issues with missing/incomplete data, lack of additional clinical predictors.
 ```
 
 #### 27a. Handling of Poor Data Quality
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html](https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html)
+- [waitlist-data2.html](https://plotly-demo.s3.us-east-1.amazonaws.com/waitlist-data2.html)
 
 
 #### 27b. User Interaction & Expertise Required
 
-- [https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html](https://github.com/Jerome3590/survival_analysis/blob/main/model_data/waitlist-data2.html)
+- [waitlist-data2.html](https://plotly-demo.s3.us-east-1.amazonaws.com/waitlist-data2.html)
 
 
 #### 27c. Future Research and Generalizability
