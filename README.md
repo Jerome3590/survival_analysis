@@ -29,7 +29,7 @@ graph LR
   F --> F5[waitlist-data2.qmd]
   F --> F6[waitlist-data2.html]
   A --> G[eda]
-  G --> G1[report.html]
+  G --> G1[data_profile_report.html](https://plotly-demo.s3.us-east-1.amazonaws.com/data_profile_report.html)
   G --> G2[listing-mortality-prediction.qmd]
   G --> G3[listing-mortality-prediction.html]
 ```
