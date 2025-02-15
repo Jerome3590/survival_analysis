@@ -99,6 +99,39 @@ survival_model %<>%
 
 ```
 
+```{r}
+
+library(DataExplorer)
+library(jsonlite)
+
+p <- plot_str(survival_model)  # Generate networkD3 object
+
+write_json(p, here("model_data","structure_plot.json"), pretty = TRUE)
+
+
+```
+
+
+```{r}
+
+library(DataExplorer)
+
+config <- configure_report(
+  add_plot_qq = FALSE,
+  add_plot_prcomp = FALSE,
+  add_plot_scatterplot = FALSE,
+  add_plot_correlation = FALSE,
+  add_plot_str = FALSE,
+  global_ggtheme = quote(theme_minimal(base_size = 14))
+)
+
+create_report(survival_model, 
+              y = "outcome", 
+              config=config)
+
+```
+
+
 ```{r echo=FALSE}
 
 survival_model %<>% 

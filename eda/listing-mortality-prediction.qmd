@@ -1,7 +1,7 @@
 ---
 title: "Listing Mortality Prediction"
 author: "Michael D. Porter"
-date: "`r format(Sys.Date(), '%B %d, %Y')`"
+date: "07/23/2024"
 format:
   html:
     toc: true
@@ -14,11 +14,6 @@ format:
     df-print: paged
 theme: lumen
 ---
-
-
-```{r, echo=FALSE}
-# setwd("analysis/waitlist-survival/")
-```
 
 
 # Settings and Functions {.hidden .unnumbered .unlisted}
@@ -79,84 +74,6 @@ print_table <- function(x, digits=3, align="r", position = "left"){
              box_css = "border: 1px solid #ddd; padding: 5px; overflow:auto; max-height:400px; ",)
 }
 ```
-
-```{r plot_data}
-# Univariate plot showing relationship between predictor and outcome
-# Creates n bins on x-axis. For numeric var, uses quantile binning 
-# (ggplot2::cut_number()). Else forcats::fct_lump_n() to create n bins. 
-# Adds an explicit bin for missing (NAs). 
-# Uses posterior mean and 95% credible intervals from empirical bayes 
-#  (Laplace smoothing) of probability. 
-
-
-plot_data <- function(data, var, n = 12){
-  # n is the maximum number of bins/levels to use in plot
-  k = 5          # shrinkage prior (number of prior observations)
-  
-  y = 1-data$outcome # set survival as outcome of interest
-  x = data %>% pull({{var}})
-  if(all(is.na(x))) return(ggplot())
-
-  mu = mean(y)
-  if(n_distinct(x) <= {{n}}) x = factor(x)
-  if(is.character(x)) x = factor(x)
-  if(is.factor(x)) x = fct_lump_n(x, n = {{n}})
-  if(is.numeric(x) | lubridate::is.POSIXt(x) | lubridate::is.Date(x)){
-    x = ggplot2::cut_number(x, n = {{n}})
-  }
-  x = fct_na_value_to_level(x)   # convert NAs to explicit level
-  tibble(x, y) %>% 
-    group_by(x) %>% 
-    summarize(
-      n = n(),                  # number in bin/level
-      n1 = sum(y > 0),          # number of outcomes of interest in bin/level
-      p = (n1 + k*mu)/(n + k),  # laplace smoothing estimate
-      alpha = (n1 + k*mu),
-      beta =  (n-n1 + k*(1-mu)), 
-      lower = qbeta(.025, alpha, beta), 
-      upper = qbeta(.975, alpha, beta),
-      # se = sqrt(p*(1-p)/n),     # confidence intervals based on laplace
-      # lower = pmax(0, p - 2*se),# approx 95% intervals
-      # upper = pmin(1, p + 2*se)
-    ) %>% 
-    ggplot(aes(x, p)) + 
-    geom_hline(yintercept = mean(y), lty = 3) + 
-    geom_errorbar(aes(ymin=lower, ymax=upper)) + 
-    geom_point() + 
-    # labs(x = xlab) + 
-    # scale_x_discrete(guide = guide_axis(n.dodge = 2))
-    scale_x_discrete(labels = scales::label_wrap(10)) +
-    labs(x = sym(var), y = "Waitlist Survival") + 
-    coord_cartesian(ylim = c(.80, 1))
-}
-```
-
-
-```{r univariate-smoother}
-library(mgcv)
-smoother <- function(x, y, method = "gam"){
-  method = match.arg(method, c("gam", "glm"))
-  missing = (is.na(x) | is.na(y))
-  x = x[!missing] 
-  y = y[!missing]
-  if(n_distinct(x) == 1) return(NULL)
-  if(is.character(x) || n_distinct(x) < 7) x = factor(x)
-  bs = ifelse(is.factor(x), "re", "tp")
-  if(method == "gam"){
-  tibble(x, y) %>% 
-    mgcv::gam(y~s(x, bs=bs, k = 8), # max of ~k edf
-              method = "REML",
-              family = binomial(),
-              data = .)
-    } else if(method == "glm"){
-      tibble(x, y) %>% 
-      glm(y~x,
-          family = binomial(),
-          data = .)
-    } else stop("`method` is not valid")
-}
-```
-
 
 ```{r perf-metrics}
 calc_metrics <- function(y, p, thres=0.5){
@@ -330,62 +247,6 @@ data_train = data_train %>% clean_data()
 data_test = data_test %>% clean_data()
 ```
 
-
-
-<!-- 3. Add size percentiles 
-
-```{r, eval = FALSE, echo=FALSE}
-calc_cdc_perc <- function(x, L, M, S){
-  Z = ifelse(L != 0, ((x/M)^L - 1)/(L*S), log(x/M)/S) 
-  pnorm(Z)
-}
-
-
-WEIGHT_KG_PERC = read_csv("~/Downloads/wtageinf.csv") %>% filter(Agemos < 24) %>% 
-  bind_rows(read_csv("~/Downloads/wtage.csv")) %>% 
-  filter(Agemos %in% seq(6.5, 500, by = 12)) %>% 
-  transmute(
-    GENDER = case_match(Sex, 1 ~ "M", 2~"F"), 
-    AGE = floor(Agemos/12),
-    percentile = pmap(list(L, M, S), function(L, M, S){
-      function(x) calc_cdc_perc(x, L, M, S)
-      })
-  )
-
-HEIGHT_CM_PERC = read_csv("~/Downloads/lenageinf.csv") %>% 
-  mutate_if(is.character, as.numeric) %>% 
-  filter(Agemos < 24) %>% 
-  bind_rows(read_csv("~/Downloads/statage.csv")) %>% 
-  filter(Agemos %in% seq(6.5, 500, by = 12)) %>% 
-  transmute(
-    GENDER = case_match(Sex, 1 ~ "M", 2~"F"), 
-    AGE = floor(Agemos/12),
-    percentile = pmap(list(L, M, S), function(L, M, S){
-      function(x) calc_cdc_perc(x, L, M, S)
-      })
-  )
-
-add_size_percentiles <- function(data){
-  data %>% 
-    left_join(WEIGHT_KG_PERC, by = c("AGE", "GENDER")) %>% 
-    mutate(WEIGHT_KG_PERC = map2_dbl(percentile, WEIGHT_KG, ~.x(.y))) %>% 
-    select(-percentile) %>% 
-    left_join(HEIGHT_CM_PERC, by = c("AGE", "GENDER")) %>% 
-    mutate(HEIGHT_CM_PERC = map2_dbl(percentile, HEIGHT_CM, ~.x(.y))) %>% 
-    select(-percentile)
-}
-
-
-
-data_train = data_train %>% add_size_percentiles()
-data_test = data_test %>% add_size_percentiles()
-
-
-```
-
--->
-
-
 3. Create 10-fold cv of training data.
 ```{r cv-folds}
 set.seed(2024)
@@ -431,16 +292,10 @@ base_rec =
     WL_DT,             # use LIST_YR for temporal information
     #------------------------------------- Substitutes
     # LC_effect,
-    median_wait_days,       # use LC_effect instead
-    median_wait_days_1A,    # use LC_effect instead
-    median_wait_days_STATUS,# use LC_effect instead
-    median_refusals_old, # use median_refusals instead
-    mean_refusals,       # use median_refusals instead
     p_refusals,          # use median_refusals instead
     #-------------------------------------
     # LISTING_CTR_CODE, # Let individual models choose
     REGION,           # Some regions only have 1-2 centers
-    ## Requested by Dr. Haregu
     LIFE_SUPPORT_OTHER,
     PGE_TCR,
     LIST_YR,
@@ -515,7 +370,7 @@ lasso_rec =
   base_rec %>% 
   #: Remove additional variables for this model
   step_rm(
-    LISTING_CTR_CODE,
+    # LISTING_CTR_CODE,
   ) %>%
   #: Add additional variables to represent missing predictors
   step_indicate_na(all_predictors()) %>% 
@@ -715,21 +570,6 @@ walk(imp_vars, plot_additive_effects, model = lasso_fit)
 
 ```
 
-
-```{r echo=FALSE}
-# auc    brier log_loss   accuracy
-# 0.731 0.0839    0.296      0.9
-# 0.727 0.0847    0.298    0.902  | No LISTING_CTR_CODE
-# 0.727 0.0843    0.297    0.902  | removed DONCRIT_{AGE, WGT, HGT}
-# 0.732 0.0841    0.296    0.902  | removed extra CAND_DIAG_LISTING
-# 0.737 0.0839    0.294    0.902  | using DIAG_CODE
-# 0.740 0.0840    0.294      0.9  | polynomials
-# 0.730	0.083	    0.295	   0.900
-# 0.731	0.084	0.295	0.899
-```
-
-
-
 ## GAM
 
 ### 1. Tidymodels recipe
@@ -741,9 +581,9 @@ library(mgcv)
 gam_rec = 
   base_rec %>% 
   #: Remove additional variables for this model
-  step_rm(
-    LISTING_CTR_CODE,
-  ) %>% 
+  # step_rm(
+  #   LISTING_CTR_CODE,
+  # ) %>% 
   #: Add additional variables to represent missing predictors
   step_indicate_na(all_predictors()) %>% 
   #: Impute missing values
@@ -801,7 +641,7 @@ fit_gam = mgcv::gam(outcome ~
                 # s(TOT_SERUM_ALBUM) +
                 s(CAND_DIAG, bs = "re") +
                 # s(WL_OTHER_ORG, bs = "re") + 
-              # s(LISTING_CTR_CODE, bs = "re") +
+               s(LISTING_CTR_CODE, bs = "re") +
                 # s(LIST_YR) +
                 # s(REGION, bs = "re") +
                 # s(LC_effect, k=4) + 
@@ -845,11 +685,6 @@ data_test_gam %>%
   mutate_all(\(x) digits(x, 3))
 ```
 
-
-```{r echo=FALSE}
-# auc  brier log_loss accuracy
-# 0.737	0.083	0.293	0.902
-```
 
 ### 5. Partial Dependence Plots
 
@@ -915,23 +750,6 @@ walk(1:nrow(gam_plot_data), \(i) plot_gam_effects(i))
 ```
 
 
-
-
-
-```{r gam-fit-plots, echo=FALSE, eval=FALSE}
-# #| out-width: "100%"
-# library(gratia)
-# library(patchwork)
-# gratia::draw(fit_gam, scales="fixed", parametric = TRUE) & ylim(-3,3)
-```
-
-
-```{r gam-single-plot, eval=FALSE, echo=FALSE}
-# gratia::draw(fit_gam, select = 1) + coord_cartesian(ylim = c(-2, 2))
-```
-
-
-
 ## Random Forest
 
 ### 1. Tidymodels specification
@@ -957,7 +775,7 @@ rf_rec =
   base_rec %>% 
   #: Remove additional variables for this model
   step_rm(
-    LISTING_CTR_CODE,
+    # LISTING_CTR_CODE,
   ) %>% 
   #: Add additional variables to represent missing predictors
   step_indicate_na(all_predictors()) %>% 
@@ -978,21 +796,6 @@ rf_wflow =
 ```
 
 ### 2. Tune `mtry`
-
-```{r, echo=FALSE, eval=FALSE}
-#: GP tuning
-# set.seed(1000)
-# tune_res = tune_bayes(
-#   object = rf_wflow,
-#   resamples = cv_folds,
-#   iter = 5, 
-#   initial = 5, 
-#   param_info = dials::parameters(mtry(range=c(1, 100))),
-#   metrics = metric_set(roc_auc, brier_class, mn_log_loss, accuracy), 
-#   control = control_bayes(verbose=FALSE)
-# )
-```
-
 
 Use OOB observations for tuning instead of cross-validation.
 ```{r rf-oob-tuning}
@@ -1018,19 +821,6 @@ mtry_grid = oob_perf %>%
   slice_min(oob_error, n = 5) %>% # keep best 5 mtry values
   select(mtry)
 ```
-
-```{r rf-cv-tuning}
-# set.seed(1000)
-# tune_res = tune_grid(
-#   object = rf_wflow,
-#   resamples = cv_folds,
-#   grid = mtry_grid,
-#   metrics = metric_set(roc_auc, brier_class, mn_log_loss, accuracy), 
-#   control = control_grid(verbose=FALSE)
-# )
-
-```
-
 
 
 ### 3. CV performance
@@ -1075,10 +865,7 @@ data_test %>%
   ) %>% 
   reframe(calc_metrics(outcome, p_rf)) %>% mutate_all(\(x) digits(x, 3))
 ```
-```{r echo=FALSE}
-# auc    brier  log_loss   accuracy
-# 0.734	0.085	0.298	0.898
-```
+
 
 
 ### 5. Variable Importance
@@ -1122,7 +909,7 @@ bt_spec =
 bt_rec = 
   base_rec %>% 
   step_rm(
-    LISTING_CTR_CODE,
+    # LISTING_CTR_CODE,
   ) %>% 
   # step_dummy(LISTING_CTR_CODE, one_hot = TRUE) %>% 
   #: Convert categorical predictors to dummy 
@@ -1195,12 +982,6 @@ bt_fit
 bt_fit %>% extract_fit_parsnip() %>% vip::vi() %>% filter(Importance > 1E-8)
 ```
 
-```{r, echo=FALSE, eval=FALSE}
-# best_auc = tibble(trees = 75, tree_depth=1)
-# set.seed(1234)
-# bt_fit = finalize_workflow(bt_wflow, best_auc) %>% fit(data_train)
-```
-
 
 ```{r bt-test-performance}
 data_test %>% 
@@ -1210,12 +991,6 @@ data_test %>%
     p_bt =  predict(bt_fit, data_test, type = "prob")$.pred_1
   ) %>% 
   reframe(calc_metrics(outcome, p_bt)) %>% mutate_all(\(x) digits(x, 3))
-```
-
-
-```{r echo=FALSE}
-# auc    brier  log_loss   accuracy
-# 0.739	 0.084	0.294	     0.898
 ```
 
 ### 6. SHAP Dependence Plot
@@ -1636,267 +1411,6 @@ loaded via a namespace (and not attached):
 [67] mvnfast_0.2.7      GPfit_1.0-8        listenv_0.8.0     
 [70] viridisLite_0.4.2  ipred_0.9-12       prodlim_2019.11.13
 [73] rlang_1.1.4       
-```
-
-
-Ensemble - 
-```{r}
-# data_test %>% 
-#     transmute(
-#         WL_ID_CODE, 
-#         outcome = factor(outcome, c(1,0)), 
-#         lasso =  1-predict(cv_fit, X_test_lasso, type = "response", 
-#                            s = "lambda.min")[,1], 
-#         xgboost =  predict(bt_fit, data_test, type = "prob")$.pred_1, 
-#         RF =  predict(rf_fit, data_test, type = "prob")$.pred_1,
-#         GAM = 1-predict(fit_gam, data_test_gam, type = "response") %>% as.numeric
-#     ) %>%
-#   mutate(across(3:6, logit)) %>% 
-#   glm(outcome ~ lasso + xgboost + RF + GAM, 
-#       family = binomial(), data = .) %>% summary()
-```
-
-
-
-TODO:
-- Compare variable important
-- compare partial dependence of all models
-- Plots of decision threshold vs. decision metrics
-- PDP/SHAP/LIME plots from all models
-- Standard Variable importance (perhaps from PDP)
-- Residual check against listing centers and regions
-- residual check against other predictors not included in model
-- Repeat this multiple times (nested cross-validation)
-- Ensemble and checking consistent predictions across models
-  ** Paper: does the predictive model choice change decisions? 
-
-
-Calibration Plots
-```{r}
-library(probably)
-data_test %>% 
-  transmute(
-    WL_ID_CODE, 
-    outcome,
-    lasso =  1-predict(cv_fit, X_test_lasso, type = "response", 
-                           s = "lambda.min")[,1], 
-    xgboost =  predict(bt_fit, data_test, type = "prob")$.pred_1, 
-    RF =  predict(rf_fit, data_test, type = "prob")$.pred_1,
-    GAM = 1-predict(fit_gam, data_test_gam, type = "response") %>% as.numeric,
-    ensemble = (lasso + xgboost + RF + GAM) / 4
-  ) %>% 
-  pivot_longer(c(lasso, xgboost, RF, GAM, ensemble)) %>% 
-  split(.$name) %>% 
-  walk(~ cal_plot_breaks(., truth = outcome, estimate = value, num_breaks = 10) %>% print)
-```
-
-```{r}
-tmp = data_test %>% 
-  transmute(
-    WL_ID_CODE, 
-    outcome,
-    lasso =  1-predict(cv_fit, X_test_lasso, type = "response", 
-                           s = "lambda.min")[,1], 
-    xgboost =  predict(bt_fit, data_test, type = "prob")$.pred_1, 
-    RF =  predict(rf_fit, data_test, type = "prob")$.pred_1,
-    GAM = 1-predict(fit_gam, data_test_gam, type = "response") %>% as.numeric, 
-  ) %>% 
-  pivot_longer(c(lasso, xgboost, RF, GAM)) %>% 
-  group_by(WL_ID_CODE, outcome) %>% 
-  summarize(mu= mean(value), sd=sd(value), range = diff(range(value)), 
-            median =median(value)) %>% 
-  ungroup() %>% 
-  arrange(-sd) 
-
-tmp %>% ggplot(aes(mu, fill = factor(outcome))) + geom_density(alpha = .25)
-tmp %>% ggplot(aes(median, fill = factor(outcome))) + geom_density(alpha = .25)
-
-
-```
-
-
-
-
-
-```{r}
-# Age and Gender adjusted size percentiles
-size_perc = bind_rows(data_train, ) %>%  # data_test
-  select(GENDER, AGE, HEIGHT_CM, WEIGHT_KG, BMI, outcome) %>% 
-  group_by(GENDER, AGE) %>% 
-  mutate(
-    n = n(),
-    HEIGHT_CM_PERC = percent_rank(HEIGHT_CM),
-    WEIGHT_KG_PERC = percent_rank(WEIGHT_KG),
-    ) %>% 
-  arrange(n)
-size_perc %>% 
-  pivot_longer(c(-outcome, -n, -GENDER)) %>% 
-  ggplot(aes(value, 1-outcome)) + geom_smooth() + facet_wrap(~name, scales=  "free_x") + 
-  coord_cartesian(ylim = c(.8, 1))
-
-size_perc %>% ggplot(aes(HEIGHT_CM, HEIGHT_CM_PERC, color=outcome)) + geom_point()
-
-
-glm(outcome ~ AGE + BMI + HEIGHT_CM + HEIGHT_CM_PERC, # + #WEIGHT_KG_PERC, 
-    family = binomial(), data = size_perc) %>% summary
-
-
-```
-
-
-
-
-
-### bt explainability
-
-
-```{r}
-library(DALEX)
-library(DALEXtra)
-
-bt_explain = explain_tidymodels(
-  bt_fit,
-  data = data_train,
-  y = data_train$outcome,
-)
-```
-
-
-```{r}
-pdp_plot <- function(explainer, var){
-  mu = 1-mean(data_test$outcome)
-  set.seed(9876)
-  df = model_profile(explainer, variable = var)$agr_profiles %>% 
-    as_tibble %>% rename(x = "_x_", yhat = "_yhat_") %>% 
-    mutate(yhat = yhat - mean(yhat) + mu) 
-    
-  if(is.factor(df$x) || is.character(df$x) || (n_distinct(df$x) < 4) ) {
-    plt = df %>% 
-    ggplot(aes(as.factor(x),yhat)) + 
-    geom_errorbar(aes(ymin=yhat, ymax=yhat)) + 
-    scale_x_discrete(labels = scales::wrap_format(10))
-  } else{
-    plt = df %>% 
-    ggplot(aes(x,yhat)) + 
-    geom_line()
-  }
-    plt + 
-      geom_hline(yintercept = mu, color = "orange", alpha = .5)  +
-      geom_rug(sides = "b", alpha = .25) + 
-      labs(x = var, y = "avg prediction")  +
-      coord_cartesian(ylim = c(.825, .975))  
-}
-
-
-# pdp_plot(bt_explain, imp_vars[9])
-  
-
-# model_profile(bt_explain, variable = "AGE") %>% plot()
-imp_vars = 
-  bt_fit %>% extract_fit_parsnip() %>% 
-  vip::vi() %>% filter(Importance > 1E-8) %>% 
-  pull(Variable) %>% 
-  str_remove("na_ind_") %>% #str_remove("_X.+") %>% 
-  str_remove("_Unknown") %>% str_remove("_Yes") %>% 
-  str_replace("ABO(_.+)", "ABO") %>% 
-  str_replace("CAND_DIAG_CODE(_.+)", "CAND_DIAG_CODE") %>% 
-  {ifelse(. == "CAND_DIAG_CODE", ., str_replace(.,"CAND_DIAG(_.+)", "CAND_DIAG"))} %>%
-  str_replace("LIFE_SUPPORT_CAND_REG(_.+)", "LIFE_SUPPORT_CAND_REG") %>% 
-str_replace("eGFR_CODED", "eGFR") %>% # since eGFR_CODED isn't in data
-  str_replace("RACE(_.+)", "RACE") %>% 
-  unique() 
-
-walk(imp_vars, \(var) pdp_plot(bt_explain, var = var) %>% plot)
-
-```
-
-
-
-## Important Predictors
-```{r}
-bind_rows(
-vip::vi(cv_fit, lambda = cv_fit$lambda.min) %>% filter(Importance > 1E-8) %>% 
-  transmute(model="lasso", Variable, rank = min_rank(-Importance))
-,fit_gam %>% tidy() %>% arrange(p.value) %>% 
-  transmute(model = "gam", Variable=term, rank = min_rank(p.value))
-# ,rf_fit %>% extract_fit_parsnip() %>% vip::vi() %>% filter(Importance > 1E-8) %>% 
-#   transmute(model="rf", Variable, rank = min_rank(-Importance))
-,bt_fit %>% extract_fit_parsnip() %>% vip::vi() %>% filter(Importance > 1E-8) %>%
-  transmute(model="bt", Variable, rank = min_rank(-Importance))
-) %>% 
-  mutate(Variable = Variable %>% 
-           str_remove("s\\(") %>% str_remove("\\)") #%>%str_remove("_poly.+") 
-  ) %>% 
-  mutate(Var2 = get_raw_variable_names(Variable)) %>% 
-  group_by(Var2, model) %>% 
-    slice_min(rank) %>% 
-  group_by(Var2) %>% 
-  summarize(n_ranked = n(), med_rank = median(rank, na.rm=TRUE), min_rank = min(rank, na.rm=TRUE)) %>% 
-  arrange(-n_ranked, med_rank) %>% print(n=100)
-```
-
-
-
-```{r}
-fit_gam %>% tidy() %>% arrange(p.value) %>% print(n=30)
-# 3 CAND_DAIG
-# VENT
-# HEIGHT poly(3)
-# ECMO, DIALYSIS
-# AGE (1)
-# LISTING_CTR_CODE (22)
-# RACE (1.5)
-# ...
-# median_refusals (2)
-# FUNC_STAT_CAND_REG (3.5)
-# ABO (1.3)
-# LIFE_SUPPORT_OTHER .5
-# 
-```
-
-
-
-## Exploratory Analysis
-
-
-```{r}
-set.seed(9876)
-model_profile(bt_explain, variable = "eGFR")$agr_profiles %>% 
-  as_tibble %>% rename(x = "_x_", yhat = "_yhat_")
-```
-
-
-
-```{r}
-fit = smoother(data_train$eGFR, data_train$outcome)
-
-tibble(x = seq(0, 200, length=100)) %>% 
-  mutate(p = 1-predict(fit, ., type = "response")) %>% 
-  ggplot(aes(x, p)) + geom_line()
-
-```
-
-
-```{r}
-data_train %>% plot_data("eGFR")
-```
-
-
-```{r}
-data_train %>% plot_data("ECMO_CAND_REG")
-```
-
-
-
-```{r}
-data_train %>% 
-  ggplot(aes(eGFR, outcome)) + geom_smooth(method = "glm")
-```
-
-
-
-```{r}
-data_train %>% plot_data("HEMODYNAMICS_CO")
 ```
 
 

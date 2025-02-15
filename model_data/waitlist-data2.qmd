@@ -2,7 +2,7 @@
 title: "Data for Waitlist Mortality"
 subtitle: "Pediatric HR Candidates"
 author: "R. Jerome Dixon, Michael D. Porter"
-date: "`r format(Sys.Date(), '%B %d, %Y')`"
+date: "07/05/2024"
 format:
   html:
     toc: true
@@ -17,18 +17,18 @@ theme: lumen
 ---
 
 
-This notebook shows how the data for modeling waitlist mortality is generated. 
+This notebook generates the waitlist mortality data. 
 
-TODO:
-1. Combine candidate data with waitlist ranges to see if wide/narrow offer consideration impacts survival (e.g., only consider donors < 200mi)
+The required input files are:
 
-Changes:
-1. Added Body Surface Area (BSA)
-2. Updated Center Stats Calculations
+- `data/throacic.rds`
+- `data/cand_wl_hist.rds`
+- `data/refusals.csv`
+- `data/STAR File Documentation.xls`
 
-```{r, echo=FALSE}
-# setwd("analysis/waitlist-survival/")
-```
+The outputs are:
+
+- `data/model_data.{csv, rds}`
 
 
 # Settings and Functions {.hidden .unnumbered .unlisted}
@@ -217,7 +217,6 @@ REM_CD_code = readxl::read_excel(file.path(dir_data, "STAR File Documentation.xl
 ```
 
 
-
 ## Population
 
 ### 1. Pediatric Candidate (Age < 18) on waitlist for heart
@@ -243,8 +242,6 @@ There are `r nrow(thor2)` pediatric waitlists between `r date_rng[1]` and `r dat
 
 ### 3. No prior heart transplants
 
-We can discuss allowing these candidates. My initial reason for exclusion is keep things simple. Otherwise, we'd need to keep track of the number of past transplants and the time from the last transplant (some are only a few days). 
-
 ```{r}
 thor3 = thor2 %>% 
   filter(
@@ -260,15 +257,11 @@ This removed `r nrow(thor2) - nrow(thor3)` and leaves `r nrow(thor3)`.
 
 Keep only the data from the first time a patient was listed. This will exclude the waitlists corresponding to patients i) who had previous heart transplants, ii) are listed multiple times, and iii) were transferred to another center. 
 
-We could keep some of these, but handling the multiple waitlists and transfers becomes a little tricky. 
-
 ```{r}
 first_wl = thoracic %>% 
   group_by(PT_CODE) %>% 
     slice_min(INIT_DATE, with_ties = FALSE) %>% 
   ungroup()
-# For more precise identification of first waitling list, use the 
-#   waitlist data: WL_PT %>% filter(seq_wl == 1)
 
 thor4 = thor3 %>% semi_join(first_wl, by = "WL_ID_CODE")
 ```
@@ -380,9 +373,6 @@ recode_STATUS <- function(STATUS){
 
 ## Waitlist Data
 
-- TODO: consider calculating how "wide" the acceptance values are. E.g., will center consider donor 2x larger? 
-
-
 Load waitlist data
 ```{r load-waitlist-data}
 WL = read_rds(file.path(dir_data, "cand_wl_hist.rds"))
@@ -393,20 +383,10 @@ Get waitlist predictor variables
 DATA_WL = WL %>% 
   filter(CHG_TY == "A") %>% # collect data when added to waitlist
   semi_join(population, by = "WL_ID_CODE") %>% 
-  select(
+  transmute(
     WL_ID_CODE, 
-    # ORG, 
-    # STATUS, 
     WL_DT = CHG_DT,   # Date-time candidate first added to waitlist
-    PRELIM_XMATCH_REQ, 
-    # INACT_REASON_CD,      # not many cases
-    starts_with("DONCRIT"), 
-    -DONCRIT_ACPT_HIST_CIG, # all missing
-    -DONCRIT_GENDER_REQ,    # not many gender specified
-  ) %>% 
-  mutate(
     PRELIM_XMATCH_REQ = recode_YNU(PRELIM_XMATCH_REQ), 
-    across(starts_with("DONCRIT_ACPT"), recode_YNU)
   ) 
 ```
 
@@ -424,9 +404,6 @@ walk(vars, ~plot_data(model_data, var = .x) %>% print)
 
 
 ## Candidate Demographic Attributes
-
-- TODO: consider calculating relative sizes from growth charts (e.g., <https://www.cdc.gov/growthcharts/clinical_charts.htm>). This will help identify over or undersized candidates
-
 
 Get candidate demographic predictor variables
 ```{r candidate_demo_data}
@@ -474,25 +451,6 @@ walk(vars, ~plot_data(model_data, var = .x) %>% print)
 
 
 ## Candidate Risk Level Attributes
-
-```{text}
-#| echo: false
-#| eval: false
-
-- Life Support 
-    - `ECMO_CAND_REG` PATIENT ON LIFE SUPPORT - ECMO
-    - `LIFE_SUPPORT_CAND_REG` CANDIDATE LIFE SUPPORT 
-- VAD
-    - `VAD_CAND_REG` VAD 
-- Ventilator
-    - `VENTILATOR_CAND_REG` PATIENT ON LIFE SUPPORT - VENTILATOR
-    - `VENT_AFTER_LISTING_CAND` VENTILATORY SUPPORT BETWEEN LISTING AND TRANSPLANT.     
-    
-- Functional Status of candidate `FUNC_STAT_CAND_REG`
-
-- ~~Transfusions `TRANSFUSIONS_CAND`~~ This is collected at transplant
-```
-
 
 Code to convert functional status code into description
 ```{r}
@@ -615,49 +573,11 @@ walk(vars, ~plot_data(model_data, var = .x) %>% print)
     - `DIAG`: Diagnosis from at Transplant and if missing, from TCR
     - `TCR_DGN_OSTXT` and `DIAG_OSTXT` give text diagnosis
 
-```{text}
-#| echo: false
-#| eval: false
 
-- Diagnosis group {*Cardiomyopathy*, *Congenital Heart Disease*, *Other*} is based on SRTR plus McCulloch using the free text fields. 
-    - <https://www.srtr.org/tools/posttransplant-outcomes/> see tab "Additional Info" for SRTR diagnosis
-```
-
-- Dr. Haregu developed the following coding for `CAND_DIAG` using `THORACIC_DGN` variable:  
-    - Codes: 1004,1006 ~ "Myocarditis",   
-    - Codes: 1205, 1206 ~ "Congenital Heart Disease Without Surgery",  
-    - Code:  1207 ~ "Congenital Heart Disease With Surgery",   
-    - Codes: 1000, 1001, 1002, 1003, 1005, 1007, 1049, 1209 ~ "Dilated Cardiomyopathy",   
-    - Codes: 1050, 1052, 1054, 1099 ~ "Restrictive Cardiomyopathy",   
-    - Code:  1201 ~ "Hypertrophic Cardiomyopathy",   
-    - Code:  1202 ~ "Valvular Heart Disease",   
-    - Code:  999 and DIAG_OSTXT in Other_Cardiomyopathy ~ "Dilated Cardiomyopathy"   
-    - For all other codes: ~ "Other"  
+Recode candidate diagnosis into: Myocarditis, Congenital Heart Disease Without Surgery, Congenital Heart Disease With Surgery, Dilated Cardiomyopathy, Restrictive Cardiomyopathy, Hypertrophic Cardiomyopathy, Valvular Heart Disease, or Other.
 
 
-Load diagnosis codes
 ```{r diagnosis-codes}
-
-## Read dictionary
-library(readxl)
-UNOS_dict = read_excel(
-  file.path(dir_data, "STAR File Documentation.xls"), 
-  sheet = "THORACIC_FORMATS_FLATFILE",
-  skip = 1
-) %>% 
-  filter(`SAS ANALYSIS FORMAT` == "TH_DGN")%>% 
-  transmute(
-    code = as.numeric(`Data Field Value`),
-    descr = `Data Field Formatted Value`
-  ) %>% 
-  filter(!is.na(code)) 
-
-#: from SRTR: https://www.srtr.org/tools/posttransplant-outcomes/ "Additional Info" tab
-SRTR_dict = read_csv(file.path(dir_data,"SRTR-candidate-diagnosis.csv")) %>% 
-  transmute(
-    CAND_DIAG_CODE = `OPTN Diagnosis Code`,
-    SRTR_DIAG = str_remove(`SRTR Diagnosis Group`, "Heart: ")
-  ) 
 
 #: From McCulloch. If code == 999 (Other), then check free text
 Other_Cardiomyopathy = 
@@ -689,7 +609,7 @@ recode_DIAG <- function(CODE, TXT){
       CODE %in% c(1004,1006) ~ "Myocarditis",
       CODE %in% c(1205, 1206) ~ "Congenital Heart Disease Without Surgery",
       CODE == 1207 ~ "Congenital Heart Disease With Surgery",
-      CODE %in% c(1000, 1001, 1002, 1003, 1005, 1007, 1049, 1209) ~        "Dilated Cardiomyopathy",
+      CODE %in% c(1000, 1001, 1002, 1003, 1005, 1007, 1049, 1209) ~ "Dilated Cardiomyopathy",
       CODE %in% c(1050, 1052, 1054, 1099) ~ "Restrictive Cardiomyopathy",
       CODE == 1201 ~ "Hypertrophic Cardiomyopathy",
       CODE == 1202 ~ "Valvular Heart Disease",
@@ -726,42 +646,14 @@ walk(vars, ~plot_data(model_data, var = .x) %>% print)
 
 Outcomes using the individual diagnosis codes:
 ```{r}
-tmp = candidate_diagnosis %>%
-  left_join(thoracic %>% select(WL_ID_CODE, THORACIC_DGN, TCR_DGN)) %>% 
-  left_join(UNOS_dict, by = c("THORACIC_DGN" = "code")) %>% # descr.x
-  left_join(UNOS_dict, by = c("TCR_DGN" = "code")) %>%      # descr.y
-  transmute(
-    WL_ID_CODE,
-    CAND_DIAG, 
-    CAND_DIAG_LISTING,
-    CAND_DIAG_CODE_WL = str_c(THORACIC_DGN,": ", descr.x) %>% factor(),
-    CAND_DIAG_CODE_REG = str_c(TCR_DGN,": ", descr.y) %>% factor()
-  ) %>% 
-  left_join(population, by = "WL_ID_CODE")
-```
-
-
-```{r}
-tmp %>% 
-  count(CAND_DIAG_CODE_WL, CAND_DIAG, outcome) %>% 
-  spread(outcome, n, fill=0) %>% 
-  mutate(p = (`0` + .9*5) / (`0` + `1` + 5)) %>% 
-  arrange(p) %>% 
+candidate_diagnosis %>% 
+  left_join(population, by = "WL_ID_CODE") %>% 
+  count(CAND_DIAG_CODE, CAND_DIAG, outcome) %>% 
+  spread(outcome, n, fill = 0) %>% 
+  mutate(p = (`0` + .9*5) / (`0` + `1` + 5)) %>% # smooth toward 0.90
+  arrange(p)%>% 
   print_table()
 ```
-
-<!--
-Outcome using the Diagnosis from *Registration*:
-```{r, eval=FALSE, echo=FALSE}
-tmp %>% 
-  count(CAND_DIAG_CODE_REG, outcome) %>% 
-  spread(outcome, n, fill=0) %>% 
-  mutate(p = (`0` + .9*5) / (`0` + `1` + 5)) %>% 
-  arrange(p) %>% 
-  print_table()
-```
-
--->
 
 
 ## Center Level Predictors
@@ -770,7 +662,8 @@ tmp %>%
 ### Listing Center Volume
 
 
-- Calculate the number of pediatric heart transplants each year by listing center
+Calculate the number of pediatric heart transplants each year by listing center.
+
 ```{r Transplant_CTR_Volume}
 #: Number of pediatric hr transplants in previous year
 TX_YR = thoracic %>% 
@@ -792,15 +685,11 @@ TX_YR = thoracic %>%
 
 ### Listing Center Practice
 
-NOTE: These are averaged over 2010-2019. This can make things a bit misleading as centers that did good will continue to have success.  
+- `median_refusals`: median number of offer refusals per candidate at listing center. Averaged over 2010-2019.
 
-- `median_refusals`: median number of offer refusals per candidate. Averaged over 2010-2019 by listing center
+- `p_refusals`: proportion of offers at listing center that are refused. Averaged over 2010-2019.
 
-- `median_wait_days`: median number of days candidate needs to wait until first offer. Averaged over 2010-2019 by listing center.
-
-- `median_wait_days_1A`: median number of days that a Status 1A candidate needs to wait until first offer. Averaged over 2010-2019 by listing center. This will help standardize over centers that have disproportionate number of Status 2's (for example). 
-
-- `median_wait_days_status`: median number of days candidate needs to wait until first offer (by listing status; 1A will wait less than 1B). Averaged over 2010-2019 by listing center
+- `LISTING_CTR_PEDHRTX_PREV_YR`: number of pediatric heart transplants at listing center in the previous year. 
 
 - `LIST_YR`: year of waitlist
 
@@ -810,7 +699,6 @@ NOTE: These are averaged over 2010-2019. This can make things a bit misleading a
 Load data to calculate center stats
 ```{r load-center-data}
 refusals = read_csv(file.path(dir_data, "refusals.csv"))
-WT = read_csv(file.path(dir_data, "waiting_time.csv"))
 LC_effects = read_csv(file.path(dir_data, "LC_effects.csv"))
 ```
 
@@ -833,19 +721,11 @@ center_data = thoracic %>%
   ) %>% 
   # Refusal rates
   left_join(
-    refusals %>% select(LISTING_CTR_CODE, median_refusals, 
-                        mean_refusals, median_refusals_old, p_refusals),
+    refusals %>% select(LISTING_CTR_CODE, median_refusals, p_refusals),
     by = "LISTING_CTR_CODE"
     ) %>% 
-  # add median waiting time 
-  left_join(WT, by = "LISTING_CTR_CODE") %>% 
   # add listing center effects from cox-ph
   left_join(LC_effects, by = "LISTING_CTR_CODE") %>% 
-  # add STATUS for next calculation
-  left_join(
-    candidate_risk_data %>% select(WL_ID_CODE, STATUS),
-    by = "WL_ID_CODE"
-  ) %>% 
   # format
   transmute(
     WL_ID_CODE, 
@@ -854,23 +734,11 @@ center_data = thoracic %>%
     REGION = factor(REGION, 1:11), 
     pedhrtx_prev_yr = coalesce(LISTING_CTR_PEDHRTX_PREV_YR, 0), 
     median_refusals,
-    median_refusals_old,
-    mean_refusals,
     p_refusals,
     LC_effect,
-    median_wait_days,
-    median_wait_days_1A,
-    median_wait_days_STATUS = case_match(STATUS,
-                                  "Status 1A" ~ median_wait_days_1A, 
-                                  "Status 1B" ~ median_wait_days_1B, 
-                                  "Status 2"  ~ median_wait_days_2, 
-                                  "Inactive"  ~ median_wait_days_2,  
-                                  )
   )
   
 ```
-
-
 
 
 ### EDA: Listing Center Variables
@@ -882,27 +750,6 @@ model_data = center_data %>% full_join(population, by = "WL_ID_CODE")
 vars = colnames(model_data) %>% setdiff(colnames(population))
 walk(vars, ~plot_data(model_data, var = .x) %>% print)
 ```
-
-Table of Listing Center outcomes (using Bayesian estimation to help estimation of centers with few candidates): 
-```{r}
-thoracic %>% 
-  inner_join(population, by="WL_ID_CODE") %>% 
-  count(LISTING_CTR_CODE, outcome) %>% 
-  spread(outcome, n, fill=0) %>% 
-  mutate(
-    n = `0` + `1`,
-    p = (`0` + .9*5) / (`0` + `1` + 5)
-  ) %>% 
-  arrange(p) %>% 
-  left_join(
-    center_data %>% 
-      distinct(LISTING_CTR_CODE, median_refusals, median_wait_days_1A),
-    by = "LISTING_CTR_CODE"
-  ) %>% 
-  print_table()
-```
-
-
 
 
 

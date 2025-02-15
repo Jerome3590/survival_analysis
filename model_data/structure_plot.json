@@ -1,0 +1,224 @@
+{
+  "name": ["root (tibble [4,523 × 73] (S3: tbl_df/tbl/data.frame))"],
+  "children": [
+    {
+      "name": ["outcome (int)"]
+    },
+    {
+      "name": ["WL_ID_CODE (num)"]
+    },
+    {
+      "name": ["AGE (num)"]
+    },
+    {
+      "name": ["GENDER (Factor w/ 2 levels \"F\",\"M\")"]
+    },
+    {
+      "name": ["RACE (Factor w/ 5 levels \"Asian\",\"Black\",)"]
+    },
+    {
+      "name": ["WEIGHT_KG (num)"]
+    },
+    {
+      "name": ["HEIGHT_CM (num)"]
+    },
+    {
+      "name": ["BMI (num)"]
+    },
+    {
+      "name": ["BSA (num)"]
+    },
+    {
+      "name": ["ABO (Factor w/ 4 levels \"A\",\"AB\",\"B\",\"O\")"]
+    },
+    {
+      "name": ["CITIZENSHIP (Factor w/ 3 levels \"Other\",\"Travel for Tx\",)"]
+    },
+    {
+      "name": ["STATUS (Ord.factor w/ 4 levels \"Status 1A\"<\"Status 1B\"<)"]
+    },
+    {
+      "name": ["LIFE_SUPPORT_CAND_REG (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["LIFE_SUPPORT_OTHER (num)"]
+    },
+    {
+      "name": ["PGE_TCR (num)"]
+    },
+    {
+      "name": ["ECMO_CAND_REG (num)"]
+    },
+    {
+      "name": ["VAD_CAND_REG (num)"]
+    },
+    {
+      "name": ["VAD_DEVICE_TY_TCR (Factor w/ 5 levels \"LVAD\",\"LVAD+RVAD\",)"]
+    },
+    {
+      "name": ["VENTILATOR_CAND_REG (num)"]
+    },
+    {
+      "name": ["FUNC_STAT_CAND_REG (Factor w/ 12 levels \"Not Applicable (patient < 1 year old)\",)"]
+    },
+    {
+      "name": ["WL_OTHER_ORG (Factor w/ 2 levels \"No\",\"Yes\")"]
+    },
+    {
+      "name": ["CEREB_VASC (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["DIAB (Factor w/ 5 levels \"None\",\"Type I\",)"]
+    },
+    {
+      "name": ["DIALYSIS_CAND (num)"]
+    },
+    {
+      "name": ["HEMODYNAMICS_CO (num)"]
+    },
+    {
+      "name": ["IMPL_DEFIBRIL (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["INOTROP_VASO_CO_REG (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["INOTROPES_TCR (num)"]
+    },
+    {
+      "name": ["MOST_RCNT_CREAT (num)"]
+    },
+    {
+      "name": ["eGFR (num)"]
+    },
+    {
+      "name": ["TOT_SERUM_ALBUM (num)"]
+    },
+    {
+      "name": ["CAND_DIAG (Factor w/ 8 levels \"Congenital Heart Disease With Surgery\",)"]
+    },
+    {
+      "name": ["CAND_DIAG_LISTING (Factor w/ 8 levels \"Congenital Heart Disease With Surgery\",)"]
+    },
+    {
+      "name": ["CAND_DIAG_CODE (Factor w/ 27 levels \"1000)"]
+    },
+    {
+      "name": ["LISTING_CTR_CODE (Factor w/ 93 levels \"00124\",\"00248\",)"]
+    },
+    {
+      "name": ["LIST_YR (num)"]
+    },
+    {
+      "name": ["REGION (Factor w/ 11 levels \"1\",\"2\",\"3\",\"4\",)"]
+    },
+    {
+      "name": ["pedhrtx_prev_yr (num)"]
+    },
+    {
+      "name": ["median_refusals (num)"]
+    },
+    {
+      "name": ["median_refusals_old (num)"]
+    },
+    {
+      "name": ["mean_refusals (num)"]
+    },
+    {
+      "name": ["p_refusals (num)"]
+    },
+    {
+      "name": ["LC_effect (num)"]
+    },
+    {
+      "name": ["median_wait_days (num)"]
+    },
+    {
+      "name": ["median_wait_days_1A (num)"]
+    },
+    {
+      "name": ["median_wait_days_STATUS (num)"]
+    },
+    {
+      "name": ["WL_DT (POSIXct, format)"]
+    },
+    {
+      "name": ["PRELIM_XMATCH_REQ (Factor w/ 2 levels \"No\",\"Yes\")"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_HCVPOS (Factor w/ 2 levels \"No\",\"Yes\")"]
+    },
+    {
+      "name": ["DONCRIT_MAX_MILE (num)"]
+    },
+    {
+      "name": ["DONCRIT_MIN_WGT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MAX_WGT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MIN_HGT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MAX_HGT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MIN_AGE (num)"]
+    },
+    {
+      "name": ["DONCRIT_MAX_AGE (num)"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_ABO_INCOMP (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_HBCOREPOS (Factor w/ 2 levels \"No\",\"Yes\")"]
+    },
+    {
+      "name": ["DONCRIT_MIN_AGE_IMPORT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MAX_AGE_IMPORT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MIN_HGT_IMPORT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MAX_HGT_IMPORT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MIN_WGT_IMPORT (num)"]
+    },
+    {
+      "name": ["DONCRIT_MAX_WGT_IMPORT (num)"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_DCD (Factor w/ 2 levels \"No\",\"Yes\")"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_DCD_IMPORT (Factor w/ 2 levels \"No\",\"Yes\")"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_HIST_CAD (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_HTLV_POS (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_HBV_NAT_POS (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["DONCRIT_ACPT_HCV_NAT_POS (Factor w/ 3 levels \"No\",\"Unknown\",)"]
+    },
+    {
+      "name": ["List_Yr (num)"]
+    },
+    {
+      "name": ["Policy_Chg (num)"]
+    },
+    {
+      "name": ["List_Ctr (Factor w/ 89 levels \"ahbent\",\"alfoba\",)"]
+    }
+  ]
+}

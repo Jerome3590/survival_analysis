@@ -21,9 +21,6 @@ graph LR
   A --> D[tripod_ai_checklist]
   D --> D1[tripod_ai_checklistt.qmd]
   D --> D2[tripod_ai_checklist.html]
-  A --> E[utilities]
-  E --> E1[make.R]
-  E --> E2[plotting.R]
   A --> F[model_data]
   F --> F1[center-stats.qmd]
   F --> F2[center-stats.html]
@@ -32,13 +29,9 @@ graph LR
   F --> F5[waitlist-data2.qmd]
   F --> F6[waitlist-data2.html]
   A --> G[eda]
+  G --> G1[report.html]
   G --> G1[listing-mortality-prediction.qmd]
   G --> G2[listing-mortality-prediction.html]
-  G --> G3[survival_analysis_catboost_xgboost_random_forest.qmd]
-  G --> G4[survival_analysis_feature_analysis.qmd]
-  G --> G5[survival_analysis_feature_encoding.qmd]
-  G --> G6[survival_analysis_model_evaluation.qmd]
-  G --> G7[survival_analysis_models.qmd]
 ```
 
 
@@ -47,9 +40,9 @@ graph LR
 ### Final Model
 The `final_model/` directory contains- `survival_analysis_final_catboost_model.qmd`: The final CatBoost model for survival analysis.
 [survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
-
-### Shap Values  
-The `shap_values/` directory contains an Interactive Feature Importance Plot
+- Interactive Shap Values Feature Importance visualization
+- Stratified Accuracy Risk Metrics
+- images/
 
 ### Images
 The `images/` directory stores generated plots and figures:
@@ -70,18 +63,9 @@ The `data/` directory contains the data sets used in the analysis.
 Available upon request.
 
 ### Exploratory Data Analysis (EDA)  
-The `eda/` directory contains various aspects of the analysis:
-- Center statistics
-- Listing mortality prediction
+The `eda/` directory contains a data profiling report and initial model evaluations:
+- DataExplorer dataset profile report
 - Comparison of CatBoost, XGBoost, and Random Forest models
-- Feature analysis and encoding
-- Model evaluation
-- Waitlist data analysis
-
-### Utilities
-The `utilities/` directory contains R scripts for common functions:
-- `plotting.R`: Custom plotting functions for the project
-- 'make.R': Orchestration file for data pipelines
 
 ## Usage
 To reproduce the analysis:
