@@ -30,8 +30,8 @@ graph LR
   F --> F6[waitlist-data2.html]
   A --> G[eda]
   G --> G1[report.html]
-  G --> G1[listing-mortality-prediction.qmd]
-  G --> G2[listing-mortality-prediction.html]
+  G --> G2[listing-mortality-prediction.qmd]
+  G --> G3[listing-mortality-prediction.html]
 ```
 
 
