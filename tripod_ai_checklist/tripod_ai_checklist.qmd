@@ -104,7 +104,7 @@ library(here)
 
 ##### 7. Describe any data pre-processing and quality checking, including whether this was similar across relevant sociodemographic groups.
 
-- see model-data [(https://github.com/Jerome3590/survival_analysis/tree/main/model-data](https://github.com/Jerome3590/survival_analysis/tree/main/model-data)
+- see model-data [(https://github.com/Jerome3590/survival_analysis/tree/main/model_data](https://github.com/Jerome3590/survival_analysis/tree/main/model_data)
 
 #### Outcome
 
@@ -227,8 +227,8 @@ CatBoost provides a scale_pos_weight parameter for handling class imbalance, but
 - Page 6, Methods – Study Population
 - The dataset was split into **training (80%)** and **testing (20%)**.
 - SHAP Partial Dependence Plots
-  - [https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_train](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train)
-  - [https://github.com/Jerome3590/survival_analysis/tree/main/images/dependence_plots_test](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test)
+  - [https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_train)
+  - [https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test](https://github.com/Jerome3590/survival_analysis/tree/main/final_model/images/dependence_plots_test)
 
 
 #### Ethical Approval
