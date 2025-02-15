@@ -235,11 +235,9 @@ CatBoost provides a scale_pos_weight parameter for handling class imbalance, but
 
 ##### 17. Institutional Review Board Approval
 
-```         
 - Page 5-6, Methods – Data Source
 - The study was approved by the **institutional review board of the University of Virginia**.
 - Participant-informed consent or ethics committee waiver not required - retroactive study.
-```
 
 ### OPEN SCIENCE
 
