@@ -64,7 +64,7 @@ The `model_data/` directory contains the data pre-processing and processing used
 ### Exploratory Data Analysis (EDA)  
 The `eda/` directory contains a data profiling report and initial model evaluations:
 - DataExplorer dataset profile report [data_profile_report.html](https://plotly-demo.s3.us-east-1.amazonaws.com/data_profile_report.html)
-- Comparison of CatBoost, XGBoost, and Random Forest models 
+- Comparison of CatBoost, XGBoost, and Random Forest models [listing-mortality-prediction.html](https://plotly-demo.s3.us-east-1.amazonaws.com/listing-mortality-prediction.html)
 
 ## Usage
 To reproduce the analysis:
