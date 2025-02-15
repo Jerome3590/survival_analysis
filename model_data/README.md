@@ -1,6 +1,5 @@
 # **Survival Analysis Dataset**
 
-
 ## Dataset Structure
 ```mermaid
 graph LR
@@ -82,6 +81,5 @@ graph LR
   - Final dataset
  
 
-## Contact for Data Requests
+### Contact [Jerome Dixon](https://www.linkedin.com/in/jeromedixon3590/) for Data Requests
 
-[Jerome Dixon](https://www.linkedin.com/in/jeromedixon3590/)

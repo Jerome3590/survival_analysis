@@ -57,14 +57,13 @@ The `tripod_ai_checklist/` directory contains the completed TRIPOD+AI Checklist.
 
 ### Model Data
 The `model_data/` directory contains the data pre-processing and processing used in the analysis.
-
-### Data
-The `data/` directory contains the data sets used in the analysis.
-Available upon request.
+- Listing Center specific analysis
+- Waitlist specific analysis (censoring)
+- Final Model Data Set (structure_plot.json)
 
 ### Exploratory Data Analysis (EDA)  
 The `eda/` directory contains a data profiling report and initial model evaluations:
-- DataExplorer dataset profile report
+- DataExplorer dataset profile report (report.html)
 - Comparison of CatBoost, XGBoost, and Random Forest models
 
 ## Usage
