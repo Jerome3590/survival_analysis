@@ -53,7 +53,7 @@ The `images/` directory stores generated plots and figures:
 - Shapley bar plot (one-hot encoded)
 
 ### TRIPOD+AI Checklist
-The `tripod_ai_checklist/` directory contains the completed TRIPOD+AI Checklist.  
+The `tripod_ai_checklist/` directory contains the completed [TRIPOD+AI Checklist](https://plotly-demo.s3.us-east-1.amazonaws.com/tripod_ai_checklist.html).  
 
 ### Model Data
 The `model_data/` directory contains the data pre-processing and processing used in the analysis.
