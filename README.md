@@ -40,7 +40,7 @@ graph LR
 ### Final Model
 The `final_model/` directory contains:
 - The final CatBoost model for survival analysis: [survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
-- Interactive Shap Values Feature Importance visualization
+- Interactive Shap Values Feature Importance visualization [Shap Values](https://plotly-demo.s3.us-east-1.amazonaws.com/sorted_shap_values_interactive.html)
 - Stratified Accuracy Risk Metrics
 - images directory
 
@@ -63,8 +63,8 @@ The `model_data/` directory contains the data pre-processing and processing used
 
 ### Exploratory Data Analysis (EDA)  
 The `eda/` directory contains a data profiling report and initial model evaluations:
-- DataExplorer dataset profile report (report.html)
-- Comparison of CatBoost, XGBoost, and Random Forest models
+- DataExplorer dataset profile report [data_profile_report.html](https://plotly-demo.s3.us-east-1.amazonaws.com/data_profile_report.html)
+- Comparison of CatBoost, XGBoost, and Random Forest models 
 
 ## Usage
 To reproduce the analysis:
