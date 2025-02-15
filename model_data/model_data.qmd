@@ -86,9 +86,3 @@ model_data_index =
 
 model_data_index %>% write_rds(file.path(dir_data, "model_data_index.rds"))
 ```
-
-```{r}
-library(DataExplorer)
-
-```
-
