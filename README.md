@@ -38,11 +38,11 @@ graph LR
 ## Project Components  
 
 ### Final Model
-The `final_model/` directory contains- `survival_analysis_final_catboost_model.qmd`: The final CatBoost model for survival analysis.
-[survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
+The `final_model/` directory contains:
+- The final CatBoost model for survival analysis: [survival_analysis_final_catboost_model.qmd](https://plotly-demo.s3.us-east-1.amazonaws.com/survival_analysis_final_catboost_model.html)
 - Interactive Shap Values Feature Importance visualization
 - Stratified Accuracy Risk Metrics
-- images/
+- images directory
 
 ### Images
 The `images/` directory stores generated plots and figures:
@@ -58,7 +58,7 @@ The `tripod_ai_checklist/` directory contains the completed TRIPOD+AI Checklist.
 ### Model Data
 The `model_data/` directory contains the data pre-processing and processing used in the analysis.
 - Listing Center specific analysis
-- Waitlist specific analysis (censoring)
+- Candidate pre-processing and candidate wait list specific analysis (censoring)
 - Final Model Data Set (structure_plot.json)
 
 ### Exploratory Data Analysis (EDA)  

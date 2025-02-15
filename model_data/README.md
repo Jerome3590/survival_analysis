@@ -75,7 +75,7 @@ graph LR
   - Listing Center specific analysis
 
 ### Waitlist Data
-  - Candidate pre-processing and Waitlist specific analysis (censoring)
+  - Candidate pre-processing and candidate wait list specific analysis (censoring)
 
 ### Model Data
   - Final dataset
