@@ -774,7 +774,6 @@ model_data = list(
 Save `model_data.{csv, rds}`
 ```{r save-datasets}
 #| code-fold: false
-#| dependson: 
 
 model_data %>%
   write_csv(file.path(dir_save, "model_data.csv"))
